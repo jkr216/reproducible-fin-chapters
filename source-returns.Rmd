@@ -1,0 +1,125 @@
+---
+title: "Transform Asset Prices to Log Returns"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+```{r setup, message = FALSE, include = FALSE}
+# packages required for this post
+for (pkg in c('tidyverse', 'tidyquant', 'timetk', 'tibbletime')) 
+  if (!requireNamespace(pkg)) install.packages(pkg)
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+
+library(tidyverse)
+library(tidyquant)
+library(timetk)
+library(tibbletime)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+# The symbols vector holds our tickers. 
+symbols <- c("SPY","EFA", "IJS", "EEM","AGG")
+
+# The prices object will hold our raw price data throughout this book.
+prices <- 
+  getSymbols(symbols, src = 'yahoo', from = "2005-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+
+```
+
+### The XTS World
+
+We now have an `xts` object of the adjusted prices for our 5 assets. Have a quick peek.
+
+```{r, message=FALSE, warning=FALSE}
+prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
+
+asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
+
+```
+
+ 
+```{r}
+asset_returns_dplyr_byhand <- 
+  prices %>% 
+  to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+  tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+  gather(asset, returns, -date) %>% 
+  group_by(asset) %>%  
+  mutate(returns = (log(returns) - log(lag(returns)))) %>%
+  spread(asset, returns) %>% 
+  select(date, symbols)
+```
+
+```{r}
+asset_returns_tq_builtin <- prices %>%
+  tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+  gather(asset, prices, -date) %>% 
+  group_by(asset) %>%
+  tq_transmute(mutate_fun = periodReturn, period = "monthly", type = "log") %>% 
+  spread(asset, monthly.returns) %>% 
+  select(date, symbols)
+```
+
+
+```{r}
+asset_returns_tbltime <- prices %>% 
+  tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+  tbl_time(index = "date") %>% 
+  as_period("monthly", side = "end") %>%
+  gather(asset, returns, -date) %>% 
+  group_by(asset) %>% 
+  tq_transmute(mutate_fun = periodReturn, type = "log") %>% 
+  spread(asset, monthly.returns) %>% 
+  select(date, symbols)
+```
+
+
+
+```{r}
+asset_returns_long <- 
+  asset_returns_dplyr_byhand %>% 
+  gather(asset, returns, -date)
+
+```
+
+```{r}
+w <- c(0.25, 0.25, 0.20, 0.20, 0.10)
+```
+
+
+```{r}
+portfolio_returns_xts_rebalanced_monthly <- 
+  Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "months") %>%
+  `colnames<-`("returns")
+
+portfolio_returns_xts_rebalanced_yearly <- 
+  Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "years") %>%
+  `colnames<-`("returns")
+```
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly <- 
+  asset_returns_long %>%
+  tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
+
+portfolio_returns_tq_rebalanced_yearly <- 
+  asset_returns_long %>%
+  tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "years")
+```
+
+
