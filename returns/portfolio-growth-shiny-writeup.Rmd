@@ -1,0 +1,92 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(message=FALSE, warning=FALSE, eval = FALSE)
+```
+
+Now we want to port our work to a Shiny application.  Before we do that, let's cover the basics of Shiny. 
+
+Shiny is an R package that wraps R code into an interactive web application.   
+
+Shiny applications are extremely useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio, but he or she might not want to see the code, data and functions used for the calculation.  We will  embed our code and make explicit where our data came from, in case an end user does want to dig in or in case a colleague (including our future selves) want to reproduce/reuse our work. But we will also give consideration to the aesthetics and usability of our applications.
+
+This book is not a guide on building Shiny apps but we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to become an expert in Shiny, please start with shiny.rstudio.com or dedicated Shiny training.  
+
+That said, by the end of this book, we will have covered enough financial Shiny apps for the reader to be an intermediate app developer in the realm of portfolio management. Because our apps will emphasize reproducibility, you can take the foundation here and use it for more complex apps.
+
+
+Shiny applications are web-based so you will need to head to www.reproduciblefinance.com to view and use them live. All of the applications built in this book are accessible there, along with their source code. It is not necessary to visit the applications. 
+
+In practice, we would not have already built the app and the first step would be to lay out the functionality of the app. This will help us when we are first building, and it will help others who might want to use our app as the basis for future work. 
+
+The purpose of the app for an end user to be able to: 
+
+1) choose tickers and portfolio weights
+2) choose a start date
+3) choose a rebalancing frequency
+4) chart the growth of a dollar in the portfolio since the chosen start date
+
+The application encompasses all of our work thus far because it requires importing daily price data, converting to monthly log returns, assigning portfolio weights, calculating portfolio returns, and calculating the growth of a dollar. The Shiny app also uses our data visualizations for portfolio returns and dollar growth. The reason the Shiny app is so useful is that it allows an end user to choose his or her own assets and weights. It makes our work infintely applicable: the user can construct any 5-asset portfolio for which there's data in our data source. And, the number 5 is for illustrative purposes. Our app could easily support 50 assets, though we will discuss reasons why we might prefer to restrict our app to fewer choices, instead of expanding it to more.
+
+Let's get to the code. We will use Rmarkdown to build our Shiny applications by inserting into the yaml `runtime: shiny`. This will alert the server (or our laptop) that this is an interactive document. 
+
+```{r}
+---
+title: "Portfolio Growth Shiny"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+---
+```
+
+
+```{r}
+library(flexdashboard)
+library(tidyverse)
+library(highcharter)
+library(tidyquant)
+library(timetk)
+library(shiny)
+```
+
+
+  
+```{r}
+
+fluidRow(
+  column(6,
+  textInput("stock1", "Stock 1", "SPY")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+# Repeat this code chunk for each of our assets
+```
+
+Chart the time series of dollar growth. 
+
+```{r}
+renderHighchart({
+  
+  highchart(type = "stock") %>%
+  hc_title(text = "Growth of a Dollar") %>%
+  hc_add_series(portfolio_growth_xts(), name = "Dollar Growth", color = "cornflowerblue") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE) 
+  
+})
+```
+
+
+
+
+
+
+
+

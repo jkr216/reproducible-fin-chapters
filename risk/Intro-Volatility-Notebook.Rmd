@@ -1,0 +1,361 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(tidyquant)
+```
+
+This is the beginning of a series on portfolio volatility, variance and standard deviation. I realize that it's a lot more fun to ~~fantasize about~~ analyze stock returns which is why television shows and websites constantly update the daily market returns and give them snazzy green and red colors. But good ol'volatility is quite important in its own right, especially to finance geeks, aspiring finance geeks and institutional investors. If you are, might become, or might ever work with/for any of those, this series should at least serve as a jumping off point.    
+
+Briefly, our volatility project will proceed as follows:
+
+### Part 1
+1. Portfolio Volatility Intro
+  + by-hand, matrix algebra, built-in
+  + compare to SPY
+2. Visualizing Volatility Intro
+  + chart portfolio sd over time - will have to roll apply
+3. Shiny app to test different portfolios
+
+### Part 2 
+1. Asset Contributions to Volatility
+  + by-hand, matrix algebra, built-in
+  + visualize snapshot with bar graph
+2. Chart contributions over time
+  + flag any asset that surpasses a threshold
+3. Shiny app to test different portfolios
+
+### Part 3 
+1. Minimum Variance Portfolio
+  + find minimum variance portfolio weights
+2. Shiny app to test different portfolios
+
+A quick word of warning that this post begins at the beginning with portfolio standard deviation and builds up to a more compelling data visualization next time and finally a nice Shiny app after that. R users with experience in the world of volatility may wish to skip this post and wait for the visualizations next time.  That said, I would humbly offer a couple of benefits to the R code that awaits us. 
+
+First, volatility is important, possibly more important than returns. I don't think any investment professional looks back on hours spent pondering volatility as a waste of time. Plus, today we'll look at a new way to convert daily prices to monthly using the `tidyquant` package, and that might offer enough new substance.
+
+Second, as always, we have an eye on making our work reproducible and reusable. This Notebook makes it exceedingly clear how we derive our final data visualizations on portfolio volatility. It's a good template for other visualization derivations, even if standard deviation is old hat for you.
+
+Okay, without further adieu, here's where we are headed today:
+
+1. Import prices/calculate returns for 5 assets and contruct a portfolio.
+
+2. Calculate the standard deviation of monthly portfolio returns using three methods.
+- the old-fashioned equation
+- matrix algebra
+- a built-in function from `performanceAnalytics`
+
+3. Compare those to the standard deviation of monthly SPY returns. 
+
+On to step 1, wherein we import prices and calculate returns for the 5 ETFs to be used in our porftolio. Those are AGG (a US bond fund), DBC (a commodities fund), EFA (a non-US equities fund), SPY (an S&P500 ETF), VGT (a technology fund). 
+
+Let's import prices and save them to an `xts` object.
+
+```{r import prices and calculate returns, warning = FALSE, message = FALSE}
+
+# A vector of symbol for our ETFs.
+symbols <- c("SPY","IJS","EFA","EEM","AGG")
+
+# Pipe them to getSymbols, extract the closing prices and merge to one xts object. 
+# Take a look at result before moving on to calculate the returns.
+# Notice that we are only grabbing prices from 2013 to present but that is 
+# only to keep the loading time shorter for the post. 
+prices <- 
+  getSymbols(symbols, src = 'google', from = "2013-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>%
+  reduce(merge) %>% 
+  `colnames<-`(symbols)
+```
+
+Next we want to turn those daily prices into monthly returns. We will use the `to.monthly` function from the [quantmod](https://www.quantmod.com/) to turn daily prices to monthly prices, then `Return.calculate(prices_monthly, method = "log")` to convert to returns.
+
+```{r calculate returns, warning = FALSE, message = FALSE}
+
+prices_monthly <- to.monthly(prices, indexAt = "first", OHLC = FALSE)
+
+portfolioComponentReturns <- na.omit(Return.calculate(prices_monthly, method = "log"))
+
+head(portfolioComponentReturns)
+```
+
+Take a quick look at the monthly returns above, to make sure things appear to be in order. 
+
+Now on to constructing a portfolio and calculating volatility. To turn these 5 ETFs in a porftolio we need to assign them weights. Let's first create a weights vector.
+
+```{r, message = FALSE}
+w <- c(0.25, 0.20, 0.20, 0.25, 0.10)
+```
+
+Before we use the weights in our calculations, a quick sanity check in the next code chunk. This might not be necessary with 5 assets as we have today, but good practice because if we had 50 assets it could save us a lot of grief to catch a mistake early.
+
+```{r Weights Sanity Check}
+# Make sure the weights line up with assets.
+asset_weights_sanity_check <- tibble(w, symbols)
+
+asset_weights_sanity_check$w
+```
+
+And make sure they sum to 100
+
+```{r}
+sum(asset_weights_sanity_check$w)
+```
+
+Alright, now on to the fun part wherein we use the textbook equation for the standard deviation of a multi-asset portfolio. 
+
+- First, we assign the weights of each asset.
+- Then, we isolate and assign returns of each asset. 
+- Next, we plug those weights and returns into the equation for portfolio standard deviation, which involves the following:
+- Take the weight squared of each asset times it's variance and sum those weighted variance terms.
+- Then we take the covariance of each asset pair, multiplied by 2 times the weight of the first asset times the weight of the second asset. 
+- Sum together the covariance terms and the weighted variance terms. 
+- This gives us the portfolio variance. 
+- Then take the square root to get the standard deviation.  
+
+```{r By Hand Std Dev}
+# This code chunk is verbose, repetitive, inefficient it is intentionally so, 
+# to emphasize how to breakdown volatility and grind through the equation. 
+
+# Let's assign each asset a weight from our weights vector above, same as how we did when calculating returns by hand.
+
+w_1 <- w[1]
+w_2 <- w[2]
+w_3 <- w[3]
+w_4 <- w[4]
+w_5 <- w[5]
+
+asset1 <- asset_returns_xts[,1]
+asset2 <- asset_returns_xts[,2]
+asset3 <- asset_returns_xts[,3]
+asset4 <- asset_returns_xts[,4]
+asset5 <- asset_returns_xts[,5]
+
+# I am going to label this 'sd_by_hand' to distinguish from when we later use matrix algebra 
+# and a built-in function for the same operation. 
+
+sd_by_hand <- 
+  # Important, don't forget to take the square root! 
+  sqrt(
+  # Our weighted variance terms.  
+  (w_1^2 * var(asset1)) + (w_2^2 * var(asset2)) + (w_3^2 * var(asset3)) +
+  (w_4^2 * var(asset4)) + (w_5^2 * var(asset5)) +
+  # Our weighted covariance terms
+  (2 * w_1 * w_2 * cov(asset1, asset2)) +  
+  (2 * w_1 * w_3 * cov(asset1, asset3)) +
+  (2 * w_1 * w_4 * cov(asset1, asset4)) +
+  (2 * w_1 * w_5 * cov(asset1, asset5)) +
+  (2 * w_2 * w_3 * cov(asset2, asset3)) +
+  (2 * w_2 * w_4 * cov(asset2, asset4)) +
+  (2 * w_2 * w_5 * cov(asset2, asset5)) +
+  (2 * w_3 * w_4 * cov(asset3, asset4)) +
+  (2 * w_3 * w_5 * cov(asset3, asset5)) +
+  (2 * w_4 * w_5 * cov(asset4, asset5))
+  )
+
+# I want to print the percentage, so multiply by 100.
+sd_by_hand_percent <- round(sd_by_hand * 100, 2)
+
+```
+
+Okay, writing that equation out was painful and very copy/pasty but at least we won't be forgetting it any time soon. Our result is a monthly portfolio returns standard deviation of `r sd_by_hand_percent`%.  
+
+Now let's turn to the less verbose matrix algebra path and confirm that we get the same result. 
+
+First, we will build a covariance matrix of returns using the `cov()` function. 
+
+```{r}
+
+# Build the covariance matrix. 
+covariance_matrix <- cov(asset_returns_xts)
+covariance_matrix
+```
+
+Have a look at the covariance matrix. 
+
+AGG, the US bond ETF, has a negative or very low covariance with the other ETFs and it should make a nice volatility dampener.  Interestingly, the covariance between EEM and EFA is quite low as well.  Our painstakingly written-out equation above is a good reminder of how low covariances affect total portfolio standard deviation.
+
+Back to our calculation: now let's take the square root of the transpose of the weights vector times the covariance matrix times the weights vector. To perform matrix multiplcation, we use `%*%`. 
+
+```{r}
+# If we wrote out the matrix multiplication, we would get the original by-hand equation. 
+sd_matrix_algebra <- sqrt(t(w) %*% covariance_matrix %*% w)
+
+# I want to print out the percentage, so I'll multiply by 100.
+sd_matrix_algebra_percent <- round(sd_matrix_algebra * 100, 2)
+```
+
+The by-hand calculation is `r sd_by_hand_percent`% and the matrix algebra calculation is `r sd_matrix_algebra_percent`%. Thankfully, these return the same result so we don't have to sort through the by-hand equation again. 
+
+And, finally, we can use the built-in `StdDev()` function from the `performanceAnalytics` package. It takes two arguments, returns and weights.
+
+```{r}
+# Confirm portfolio volatility
+portfolio_sd <- StdDev(asset_returns_xts, weights = w)
+
+# I want to print out the percentage, so I'll multiply by 100.
+portfolio_sd_percent <- round(portfolio_sd * 100, 2)
+```
+
+We now have: 
+
+- by-hand calculation = `r sd_by_hand_percent`%
+- matrix algebra calculation = `r sd_matrix_algebra_percent`%
+- build in function calculation = `r portfolio_sd_percent`%
+
+That was quite a lot of work to confirm that 3 calculations are equal to each other but there are a few benefits.
+
+First, while it was tediuos, we should all be pretty comfortable with calculating portfolio standard deviations in various ways. That might never be useful to us, until the day that for some reason it is (e.g. if during an interview someone asks you to go to a whiteboard and write down the code for standard deviation or whatever equation/model - I think that's still a thing in interviews).
+
+More importantly, as our work gets more complicated and we build custom functions, we'll want to rely on the built-in `StdDev` function and we now have confidence in its accuracy. That's nice, but even more important is now that we have the template above, we can reuse it for other portfolios. 
+
+Also, as usual, this is more of a toy example than an actual template for use in industry.  If a team relies heavily on pre-built functions, even those built by the team itself, it's not a bad idea to have a grind-it-out sanity check Notebook like this one. It reminds team members what a pre-built function might be doing under-the-hood.
+
+Now let's turn to a little bit of portfolio theory (or, why we want to build a portfolio instead of putting all of our money into SPY). We believe that by building a portfolio of assets whose covariances of retursn are lower than the variance of SPY returns (or, equivalently, lower than the covariance of SPY returns with themselves), we can construct a portfolio whose standard deviation is lower than the standard deviation of SPY. If we believe that standard deviation and volatility are a good proxy for risk, then the portfolio would have a lower risk.
+
+To see if we succeeded, first, isolate the returns of SPY, then find the standard deviation of those returns.
+
+```{r}
+# First get the returns of the S&P500 isolated
+spy_returns <- asset_returns_xts$SPY
+
+# Now calculated standard deviation
+spy_sd <- StdDev(spy_returns)
+
+# To confirm the variance of SPY's returns is equal to 
+# the covariance of SPY's returns with themselves, 
+# uncomment and run the next two lines of code.
+# spy_var <- var(spy_returns)
+# spy_cov <- cov(spy_returns, spy_returns)
+
+# We could also have extracted this value from the SPY column and SPY row of covariance matrix
+# since the covariance of SPY with itself is equal to its variance. 
+# spy_sd_from_cov_matrix <- sqrt(covariance_matrix[4,4])
+
+# Again, I want percent so will multiply by 100.
+spy_sd_percent <- round(spy_sd * 100, 2)
+```
+
+The standard deviation of monthly SPY returns is `r spy_sd_percent`% and that of the portfolio is `r portfolio_sd_percent`%.
+
+Fantastic, our portfolio has lower monthly volatility! 
+
+Alright, despite that we have completely ignored returns, we can see the volatility benefits of assets with low or even negative covariances. That's all for today's introduction to volatility. Next time we will move to visualizing these differences in a Notebook, before heading to the world of Shiny.
+
+
+First a quick recap: this post is a continuation from the previous [Introduction to Volatility](url) post and is part of a series dedicated to portfolio volatility. Today we are going to focus on two tasks: 
+
+1. Calculate rolling standard deviations. 
+
+2. Visualize those rolling standard deviations with highcharter.
+
+
+
+```{r}
+rolling_portfolio_sd <- function(returns_df, start = 1, window = 20, weights){
+  
+  # First create start date. 
+  # For now let's always start at the first date for which we have data. 
+  start_date <- returns_df$date[start]
+  
+  # Next an end date.
+  end_date <-  returns_df$date[c(start + window)]
+  
+  # Filter on start and end date.
+  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  # Convert to xts so can use built in Performance Analytics function.
+  returns_xts <- interval_to_use %>% as_xts(date_col = date) 
+  
+  # Portfolio weights.
+  w <- weights
+  
+  # Pass xts object to function.
+  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "single")
+  
+  # Convert results to tibble. Why do I need this if I am just going to coerce back 
+  # to an xts object when this function gets applied?
+  results_to_tibble <- as_tibble(t(results_as_xts[,1])) %>% 
+    mutate(date = ymd(end_date)) %>% 
+    select(date, everything()) 
+}
+```
+
+```{r Use Function}
+# What rolling window do we want? How about 3 months.
+window <- 3
+
+# Let's us the function
+
+roll_portfolio_result <- 
+  map_df(1:(nrow(portfolio_component_monthly_returns_df)-window), rolling_portfolio_sd, 
+         returns_df = portfolio_component_monthly_returns_df, window = window, weights = w) %>%
+  mutate(date = ymd(date)) %>% 
+  select(date, everything()) %>%
+  # Convert back to xts so we can use highcharter for visualizations.
+  as_xts(date_col = date)
+```
+
+```{r}
+
+highchart(type = "stock") %>%
+  hc_title(text = "Portfolio Rolling Volatility") %>%
+  hc_add_series(roll_portfolio_result, name = "Portfolio Volatility", color = 'green') %>%
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+```{r}
+sp_rolling_sd <- na.omit(rollapply(spy_returns$SPY, window, 
+                           function(x) StdDev(x)))
+
+highchart(type = "stock") %>%
+  hc_title(text = "SPY Rolling Volatility") %>%
+  hc_add_series(sp_rolling_sd, name = "SPY Volatility", color = "blue") %>%
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+At first glance, the respective standard deviations don't look all that different because they follow roughly the same path, but at different levels. When we chart them on the same highcharter widget, the difference becomes apparent. 
+
+
+```{r}
+highchart(type = "stock") %>%
+  hc_title(text = "SPY v. Portfolio Rolling Volatility") %>%
+  hc_add_series(sp_rolling_sd, name = "SPY Volatility", color = "blue") %>%
+  hc_add_series(roll_portfolio_result, name = "Portf Volatility", color = "green") %>%
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+Interesting to note that on June 15th, SPY's rolling standard deviation dipped below that of the diversified portfolio. The portfolio volatility was plunging at the same time, but SPY's was falling faster. What happened over the 3 preceding months to explain this? Maybe we should add a flag to highlight this event. 
+
+```{r}
+sd_important_date<- as.Date(c("2017-06-15"), format = "%Y-%m-%d")
+
+highchart(type = "stock") %>%
+  hc_title(text = "SPY v. Portfolio Rolling Volatility") %>%
+  hc_add_series(sp_rolling_sd, name = "SPY Volatility", color = "blue", id = "SPY") %>%
+  hc_add_series(roll_portfolio_result, name = "Portf Volatility", color = "green") %>%
+  hc_add_series_flags(sd_important_date,
+                      title = c("SPY Low Volatility"), 
+                      text = c("SPY rolling sd dips below portfolio."),
+                      id = "SPY") %>% 
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+```
+
+
+Thanks for sticking with this rather long post. Next time we'll port this to Shiny so we can play with different asset mixes and allocations.

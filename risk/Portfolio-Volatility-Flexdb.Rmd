@@ -1,0 +1,188 @@
+---
+title: "Port Vol Shiny App"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: spacelab
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(tidyquant)
+library(DT)
+library(data.table)
+library(highcharter)
+library(timetk)
+
+source("function-folder/helpers.r")
+
+```
+
+Volatility
+===========================================
+
+Sidebar {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+helpText("Choose assets and weights.")
+
+fluidRow(
+  column(7,
+  textInput("stock1", "Stock 1", "GOOG")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(7,
+  textInput("stock2", "Stock 2", "FB")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  textInput("stock3", "Stock 3", "AMZN")),
+  column(5,
+  numericInput("w3", "Portf. %", 50, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  dateInput("start_date", "Start Date", value = "2013-01-01")),
+  column(5,
+  numericInput("window", "Window", 10, min = 3, max = 50, step = 5))
+)
+
+actionButton("go", "Submit")
+
+```
+
+```{r, message = FALSE, warning = FALSE}
+
+portfolio_vol_components <- eventReactive(input$go, {
+  
+  returns_df <- 
+    componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date) %>% 
+    mutate(date = ymd(date))
+  
+  weights <- c(input$w1/100, input$w2/100, input$w3/100)
+  
+  port_components <- 
+    map_df(1:(nrow(returns_df)-input$window), 
+           my_interval_sd, returns_df = returns_df, 
+           weights = weights, window = input$window) %>%
+    mutate_all(funs(round(., 3))) %>% 
+    mutate(date = ymd(date)) %>%
+    select(date, everything()) %>%
+    tk_xts(date_col = date)
+  # an xts comes out of this
+})
+
+portfolio_rolling_sd <- eventReactive(input$go, { 
+  
+  returns_df <- 
+    componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date) %>% 
+    mutate(date = ymd(date))
+  
+  weights <- c(input$w1, input$w2, input$w3)
+  
+  portfolio_rolling_sd <- 
+    map_df(1:(nrow(returns_df) - input$window), rolling_portfolio_sd, 
+           returns_df = returns_df, window = input$window, weights = weights) %>%
+    mutate(date = ymd(date)) %>%
+    select(date, everything()) %>%
+    tk_xts(date_col = date) %>% 
+    `colnames<-`("Rolling Port SD")
+})
+
+window_label <- reactive({input$window})
+```
+
+Row 1
+-----------------------------------------
+
+### Portfolio Rolling Volatility
+
+
+```{r}
+
+renderHighchart({
+
+  # The output of this is an xts
+  portfolio_rolling_sd <- portfolio_rolling_sd()
+  
+  highchart(type = "stock") %>% 
+    hc_title(text = "Portfolio Volatility ") %>%
+    hc_add_series(portfolio_rolling_sd, name = names(portfolio_rolling_sd)) %>%
+    hc_add_theme(hc_theme_flat()) %>%
+    hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+})
+```
+
+Row 2
+-----------------------------------
+
+### Asset Contribution to Total Volatility
+
+```{r}
+
+
+renderHighchart({
+
+  # The output of this is an xts
+  portfolio_vol_components <- portfolio_vol_components()
+  
+  highchart(type = "stock") %>% 
+    hc_title(text = "Volatility Contribution") %>%
+    hc_add_series(portfolio_vol_components[, 1], 
+                  name = names(portfolio_vol_components[, 1])) %>%
+    hc_add_series(portfolio_vol_components[, 2], 
+                  name = names(portfolio_vol_components[, 2])) %>%
+    hc_add_series(portfolio_vol_components[, 3], 
+                  name = names(portfolio_vol_components[, 3])) %>%
+    hc_add_theme(hc_theme_flat()) %>%
+    hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+})
+```
+
+
+
+Data/Download
+===========================================
+
+Column
+-----------------------------------------------------------------------
+
+### Raw Vol Data
+
+```{r}
+
+renderDataTable(server = FALSE, {
+  
+  portfolio <- portfolio_vol_components() %>% 
+    tk_tbl(preserve_index  = TRUE) %>% 
+    mutate(date = ymd(index)) %>% 
+    select(-index) %>% 
+    select(date, everything()) %>% 
+    datatable(., 
+              fillContainer = TRUE, 
+              extensions = 'Buttons', 
+              options = list(dom = 'Bfrtip',
+                             buttons = c('copy', 'csv', 'excel'), 
+                             scrollX = TRUE))
+})
+
+```
+
+
+

@@ -1,0 +1,156 @@
+---
+title: "Introduction to Volatility Visualization"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+# packages required for this post
+for (pkg in c('tidyverse', 'tidyquant', 'highcharter')) 
+  if (!requireNamespace(pkg)) install.packages(pkg)
+
+library(tidyverse)
+library(tidyquant)
+library(highcharter)
+
+symbols <- c("SPY","VGT","EFA","DBC","AGG")
+
+prices <- 
+  getSymbols(symbols, src = 'google', from = "2013-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>%
+  reduce(merge) %>% 
+  `colnames<-`(symbols)
+
+prices_monthly <- to.monthly(prices, indexAt = "first", OHLC = FALSE)
+
+portfolio_component_monthly_returns_xts <- na.omit(ROC(prices_monthly, 1, type = "continuous"))
+
+portfolio_component_monthly_returns_df <- 
+  portfolio_component_monthly_returns_xts %>% 
+  as_tibble(preserve_row_names = TRUE) %>% 
+  mutate(date = ymd(row.names)) %>% 
+  select(-row.names) %>% 
+  select(date, everything())
+
+spy_returns <- portfolio_component_monthly_returns_xts$SPY
+
+weights <- c(0.40, 0.20, 0.20, 0.10, 0.10)
+
+window <- 6
+
+spy_rolling_sd <- na.omit(rollapply(spy_returns$SPY, window, 
+                           function(x) StdDev(x)))
+
+
+rolling_portfolio_sd <- function(returns_df, start = 1, window = 6, weights){
+ 
+  start_date <- returns_df$date[start]
+  
+  end_date <-  returns_df$date[c(start + window)]
+  
+  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  returns_xts <- interval_to_use %>% as_xts(date_col = date) 
+  
+  w <- weights
+  
+  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "single")
+  
+  results_to_tibble <- as_tibble(t(results_as_xts[,1])) %>% 
+    mutate(date = ymd(end_date)) %>% 
+    select(date, everything()) 
+  
+}
+
+roll_portfolio_result <-
+  map_df(1:(nrow(portfolio_component_monthly_returns_df) - window), rolling_portfolio_sd, 
+         returns_df = portfolio_component_monthly_returns_df, window = window, weights = weights) %>%
+  mutate(date = ymd(date)) %>% 
+  select(date, everything()) %>%
+  as_xts(date_col = date) %>% 
+  `colnames<-`("Rolling Port SD")
+
+```
+
+This is the third post in our series on portfolio volatility, variance and standard deviation. 
+If you want to start at the beginning with calculating portfolio volatility, have a look at the first post [here - Intro to Volatility](https://rviews.rstudio.com/2017/07/12/introduction-to-volatility/). The second post on calculating rolling standard deviations is [here - Intro to Rolling Volatility](url). 
+
+Today we visualize rolling standard deviations with `highcharter` and we use two objects from that second post.
+
+The charts will highlight any unusual occurrences or volatility spikes/dips that we might want to investigate and  it's the fun payoff after all the equations and functions we ground out in the previous posts. 
+
+First, we will load the `.RDat` file saved from our previous Notebook (or you can run the scripts from the previous posts). 
+
+We now have 2 objects in our Global Environment
+- `spy_rolling_sd` - an `xts` object of rolling SPY standard deviations
+- `roll_portfolio_result` - an `xts` object of rolling portfolio standard deviations
+
+Because both of those are `xts` objects, we can pass them straight to `highcharter` with the `hc_add_series()` function, and we will set a name and color with the `name` and `color` arguments. Nothing too complicated here - we did the hard work in our previous Notebooks. 
+
+```{r}
+highchart(type = "stock") %>%
+  hc_title(text = "SPY v. Portfolio Rolling Volatility") %>%
+  hc_add_series(spy_rolling_sd, name = "SPY Volatility", color = "blue") %>%
+  hc_add_series(roll_portfolio_result, name = "Port Volatility", color = "green") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+Interesting to note that from late April 2016 to late October 2016, SPY's rolling standard deviation dipped below that of the diversified portfolio. The portfolio volatility was plunging at the same time, but SPY's was falling faster. What happened over the 6 preceding months to explain this?
+
+Maybe we should add a flag to highlight this event. We can also add flags for the maximum SPY volatility, maximum and minimum portfolio rolling volatility and might as well include a line for the mean rolling volatility of SPY to practice adding horizontal lines. 
+
+We will use two methods for adding flags. First, we'll hard code the date for the flag as "2016-04-29", which is the date when rolling SPY volatility dipped below the portfolio. 
+
+Second, we'll set a flag with the date     
+`as.Date(index(roll_portfolio_result[which.max(roll_portfolio_result)]),format = "%Y-%m-%d")` which looks like a convoluted mess but is adding a date for whenever the rolling portfolio standard deviation hit its maximum. 
+
+This is a bit more 'dynamic' because we can change our assets but keep this code the same and it will find the date with the maximum rolling standard deviation. Our first flag is not dynamic in the sense that it is specific to the comparison between SPY and this exact portfolio. 
+
+```{r}
+spy_important_date <- as.Date(c("2016-04-29"), format = "%Y-%m-%d")
+
+port_max_date <- as.Date(index(roll_portfolio_result[which.max(roll_portfolio_result)]),
+                         format = "%Y-%m-%d")
+port_min_date <- as.Date(index(roll_portfolio_result[which.min(roll_portfolio_result)]),
+                         format = "%Y-%m-%d")
+spy_max_date <- as.Date(index(spy_rolling_sd[which.max(spy_rolling_sd)]),
+                         format = "%Y-%m-%d")
+
+
+highchart(type = "stock") %>%
+  hc_title(text = "SPY v. Portfolio Rolling Volatility") %>%
+  hc_add_series(spy_rolling_sd, name = "SPY Volatility", color = "blue", id = "SPY") %>%
+  hc_add_series(roll_portfolio_result, name = "Portf Volatility", color = "green", id = "Port") %>%
+  hc_add_series_flags(spy_important_date,
+                      title = c("SPY Vol Dips"), 
+                      text = c("SPY rolling sd dips below portfolio."),
+                      id = "SPY") %>%
+  hc_add_series_flags(spy_max_date,
+                      title = c("SPY Max "), 
+                      text = c("SPY max rolling volatility."),
+                      id = "SPY") %>%
+   hc_add_series_flags(port_max_date,
+                      title = c("Portf Max"), 
+                      text = c("Portfolio maximum rolling volatility."),
+                      id = "Port") %>%
+  hc_add_series_flags(port_min_date,
+                      title = c("Portf Min"), 
+                      text = c("Portfolio min rolling volatility."),
+                      id = "Port") %>%
+  hc_yAxis(title = list(text = "Mean SPY rolling Vol"),
+           showFirstLabel = FALSE,
+           showLastLabel = FALSE,
+           plotLines = list(
+             list(value = mean(spy_rolling_sd), color = "#2b908f", width = 2)))  %>% 
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+
+```
+
+Hover on the flags and you can see the text we added for explanation.
+
+It's remarkable how rolling volatility has absolutely plunged since early-to-mid 2016. Since August of 2016, both the portfolio and SPY rolling standard deviations have been well below the SPY mean. 
+
+Thanks for sticking with this three-part introduction to volatility. Next time we'll port our work to Shiny and play with different assets and allocations.

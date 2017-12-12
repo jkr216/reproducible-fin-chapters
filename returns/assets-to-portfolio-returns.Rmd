@@ -1,0 +1,350 @@
+---
+title: "Assets to Portfolio Returns"
+output:
+  html_notebook: default
+---
+```{r setup, message = FALSE, include = FALSE}
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+```
+
+Today, we go back a bit to where we probably should have started in the first place, but it wouldn't have been as much fun. In our previous work on [volatility](), we zipped through the steps of importing daily stock prices and transforming to portfolio monthly returns.  Let's correct that oversight and do some spade work on transforming daily prices to portfolio monthly log returns.
+
+In a [previous post](http://www.reproduciblefinance.com/2017/09/25/asset-prices-to-log-returns/), we reviewed how to import daily prices and 4 methods to transform daily prices to monthly log returns, and then we [visualized those individual asset returns](http://www.reproduciblefinance.com/2017/09/28/visualizing-asset-returns/).  Today, we will finally combine those assets into a portfolio and analyze them as a coherent mass. 
+
+Our 5-asset portfolio will consist of the following securities and weights:
+
+    + SPY (S&P500 fund) weighted 25%
+    + EFA (a non-US equities fund) weighted 25%
+    + IJS (a small-cap value fund) weighted 20%
+    + EEM (an emerging-mkts fund) weighted 20%
+    + AGG (a bond fund) weighted 10%
+    
+A brief interlude on the concept of a portfolio. A portfolio is a weighted collection of assets (its etymology harkens back to the Latin for "to carry sheets of paper", which I s'pose made its way to the world of investments because securities used to sheets of paper too, and a portfolio of investments involved sheets of paper representing interests in several assets).  The theoretical reason that rational investors prefer a portfolio to a single asset is that a portfolio can offer a better risk/return tradeoff due to low or negavitve covariance amongst portfolio components. 
+
+Back to the task at hand: build our portfolio, analyze returns over time in a few different ways, and then visualize those returns in a few different ways.
+
+Let's load up our packages.
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(timetk)
+library(tibbletime)
+library(highcharter)
+```
+
+First, we import daily prices for the 5 ETFs.
+
+```{r}
+# The symbols vector holds our tickers. 
+symbols <- c("SPY","EFA", "IJS", "EEM","AGG")
+
+# The prices object will hold our raw price data throughout this book.
+prices <- 
+  getSymbols(symbols, src = 'yahoo', from = "2005-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+```
+
+Next we convert those to monthly log returns, using two methods. For the first method, we stay in the `xts` world.
+
+```{r}
+# XTS method
+prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
+asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))`
+```
+
+For the second method, we will stay in the `tidyverse/tidyquant` world.
+
+```{r}
+# Tidyverse method, to long, tidy format
+asset_returns_long <- 
+  prices %>% 
+  to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+  tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+  gather(asset, returns, -date) %>% 
+  group_by(asset) %>%  
+  mutate(returns = (log(returns) - log(lag(returns))))
+```
+
+Have a peek at both asset return objects. 
+
+```{r}
+head(asset_returns_xts)
+head(asset_returns_long)
+```
+
+Do we notice any differences? First, they are in a different formet.
+
+First, have a look at the left most part of `asset_returns_xts`, where the date is stored. The `asset_returns_xts` has a date index, not a column. It is accessed via `index(asset_returns_xts)`. `asset_returns_long` has a column called "date", accessed via the `$date` convention, e.g. `asset_returns_long$date`. 
+
+Second, notice the first date observation.  `asset_returns_long`, contains [x], and `asset_returns_xts` excludes the observation.  Does it matter? In a few weeks when get to the Sortino Ratio, we will see that it can matter quite a bit.
+
+Third, `asset_returns_xts` is in "wide" format, which in this case means there is a column for each of our assets.  This is the format that `xts` likes and it's the format that is easier to read as a human. However, the tidyverse wants this data to be in long or tidy format so that each variable has its own column. 
+
+Now on to constructing a portfolio and calculating volatility. To turn these 5 ETFs into a porftolio we need to assign them weights. Let's first create a weights vector.
+
+
+```{r, message = FALSE}
+w <- c(0.25, 0.25, 0.20, 0.20, 0.10)
+```
+
+Before we use the weights in our calculations, a quick sanity check in the next code chunk. This might not be necessary with 5 assets as we have today, but good practice because if we had 50 assets it could save us a lot of grief to catch a mistake early.
+
+```{r Weights Sanity Check}
+# Make sure the weights line up with assets.
+asset_weights_sanity_check <- tibble(w, symbols)
+asset_weights_sanity_check
+```
+
+Does that tibble match up with the portfolio we want to create? Looks good to me.
+
+Finally, make sure the weights sum to 100%, or 1. Again, we can eyeball this with 5 assets, but with 50 assets it would be easier to run the sanity check.
+
+```{r}
+sum(asset_weights_sanity_check$w)
+```
+
+They sum to 1. Good to go and on to portfolio returns.
+
+We will start with the textbook equation for the return of a multi-asset portfolio which is: 
+$$Return_{portfolio} = W_{1}*Return_{asset1}~+~W_{2}*Return_{asset2}~+~W_{3}*Return_{asset3}~+~W_{4}*Return_{asset4}~+~W_{5}*Return_{asset5}$$
+We grinded through the Latex, now let's grind through the R calculation. 
+
+First, assign each weight from our weights vector above to a variable.
+
+Next, assign each asset return stored in  `asset_returns_xts` to a variable.
+
+Lastly, we instert those new variables into the equation.
+
+```{r By Hand Return}
+
+w_1 <- w[1]
+w_2 <- w[2]
+w_3 <- w[3]
+w_4 <- w[4]
+w_5 <- w[5]
+
+
+
+asset1 <- asset_returns_xts[,1]
+asset2 <- asset_returns_xts[,2]
+asset3 <- asset_returns_xts[,3]
+asset4 <- asset_returns_xts[,4]
+asset5 <- asset_returns_xts[,5]
+
+portfolio_returns_byhand <-   
+  (w_1 * asset1) + 
+  (w_2 * asset2) + 
+  (w_3 * asset3) +
+  (w_4 * asset4) + 
+  (w_5 * asset5)
+
+names(portfolio_returns_byhand) <- "returns"
+```
+
+Our first portfolio returns calculation is now complete and stored as `portfolio_returns_byhand`. From a substantive perspective, we are finished and could head to visualization.  
+
+We want to cover more methods, though, so let's head to to the `xts` world and use the `Return.portfolio` function from the `Performance Analytics` package.  You might have noticed that we didn't explicitly load that package and that is because `tidyquant` imports this package for us. 
+The function requires two arguments for a portfolio, an `xts` object of returns and a vector of weights.  It's not necessary but we are also going to set `rebalance_on = "months"` so we can confirm it matches our by hand calculations above. Remember, in the by hand equation, we set the portfolio weights as fixed, meaning they never change on a month to month basis. That is equivalent to rebalancing every month. In practice, that would be quite rare. Once we confirm that it matches our by hand, we can toggle over to a more realistic annual rebalancing by changing the argument to `rebalance_on = "years"`.
+
+```{r}
+portfolio_returns_xts_rebalanced_monthly <- 
+  Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "months") %>%
+  `colnames<-`("returns")
+
+```
+
+Let's use the built-in `Return.portfolio` function again and change to the more realistic annual rebalancing with the argument `rebalance_on = "years"`.  This will change our results so that they no longer match our by-hand calculation, which effectiely rebalanced every month (since we hard coded asset weights to be the same each month). 
+
+```{r}
+portfolio_returns_xts_rebalanced_yearly <- 
+  Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "years") %>%
+  `colnames<-`("returns")
+```
+
+We can take a peek at our three portfolio objects and see how the annual rebalance made a small but important difference.
+
+```{r}
+head(portfolio_returns_byhand)
+head(portfolio_returns_xts_rebalanced_monthly)
+head(portfolio_returns_xts_rebalanced_yearly)
+```
+
+As before, we could stop here and have accomplished our substantive task (twice already - by hand and using the built in function), but we want to explore alternate methods in the world of tidyverse and tidyquant. We will use our long, tidy formatted `asset_returns_long` and convert to portfolio returns using the `tq_portfolio` function from `tidyquant`.  
+
+The `tq_portfolio` function takes a `tibble` and then asks for an assets column to group by, a returns column to find return data, and a weights column. It's a wrapper for `Return.portfolio` and thus also accepts the argument `rebalance_on = "months"`.  Since we are rebalancing by months, we should again get a portfolio returns object that matches our two existing objects `portfolio_returns_byhand` and `portfolio_returns_xts_rebalanced_monthly.`   
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly <- 
+  asset_returns_long %>%
+  tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
+```
+
+If we want to rebalance annually, which is more realistic than doing so monthlu, it's the same code as above, except we set `rebalance_on = "years"`.
+
+```{r}
+portfolio_returns_tq_rebalanced_yearly <- 
+  asset_returns_long %>%
+  tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "years")
+```
+
+We now have two more portfolio returns objects and they are both tidy tibbles. Let's take a quick look and compare how a tidy tibble of portfolio returns compares to an xts object of portfolio returns. 
+
+```{r}
+head(portfolio_returns_tq_rebalanced_yearly)
+head(portfolio_returns_xts_rebalanced_yearly)
+```
+
+Since there is only one column of returns, there is no wide versus long format for the tibble and it looks almost identical to the `xts` object. The only difference is the date: the tibble has a column that holds the date that can be accessed with the $ operator, whereas the xts object has a date index, accessed with `index`.
+
+By-hand, xts and tidyquant, each has its uses and advantages depending on our end goal.  Next time we will think about how to visualize portfolio returns, and how the different objects fit into different visualization paradigms. 
+
+### End First Post
+
+### Visualize
+
+First, let's use `highcharter` to  visualize the `xts` formatted portfolio returns.
+
+As we noted when looking at individual asset returns, Highcharter is fantastic for visualizing a time series or many time series.  First, we set `highchart(type = "stock")` to get a nice time series line. Then we add our `returns` column from the portfolio returns `xts` object.  We don't have to add the date index or point to it in any way. Highcharter recognizes the `xts` object and ports over the date index under the hood.
+
+```{r}
+highchart(type = "stock") %>% 
+  hc_title(text = "Porftolio Monthly Returns") %>%
+  hc_add_series(portfolio_returns_xts_rebalanced_yearly$returns, 
+                  name = "Rebalanced Yearly", color = "cornflowerblue") %>%
+  hc_add_theme(hc_theme_flat()) %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+```
+
+Let's add one of our more volatile assets and see if anything looks interesting
+
+```{r}
+portfolio_returns_xts_rebalanced_yearly$mean <- 
+  round(mean(portfolio_returns_xts_rebalanced_yearly$returns), 4)
+```
+
+```{r}
+
+highchart(type = "stock") %>% 
+  hc_title(text = "Porftolio Monthly Returns") %>%
+  hc_add_series(portfolio_returns_xts_rebalanced_yearly$returns, 
+                  name = "Rebalanced Yearly", color = "cornflowerblue", lineWidth = 3) %>%
+  hc_add_series(asset_returns_xts$IJS, 
+                  name = "IJS", color = "pink", lineWidth = 1.5) %>%
+   hc_add_series(asset_returns_xts$AGG, 
+                  name = "AGG", color = "green", lineWidth = 1.5) %>%
+ # hc_add_series(portfolio_returns_xts_rebalanced_yearly$mean, 
+  #                name = "Mean Portfolio", color = "purple", lineWidth = 1.5) %>%
+  hc_add_theme(hc_theme_flat()) %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+```
+
+
+Take a look at the chart. It has a line for the monthly log returns of our portfolio and for the returns of IJS and AGG. IJS is a small-cap ETF and we would expect it to be more volatile than the portfolio, and AGG is a bond ETF, which we would expect to be less volatile. The chart offers unscientific support to that When we get to volatility, we will inspect the relationship more rigorously.
+
+
+As before, we can use Highcharter for histogram making as well. One method is to first call the base function `hist` on the data along with the arguments for breaks and `plot = FALSE`. Then we can call `hchart` on that object. 
+
+```{r}
+hc_portfolio <- hist(portfolio_returns_xts_rebalanced_yearly$returns, breaks = 50, plot = FALSE)
+
+hchart(hc_portfolio) %>% 
+  hc_title(text = "Portfolio Log Returns Distribution")
+```
+
+There's nothing wrong with that highcharter histogram. It displays well the distribution of portfolio returns. It does not, however, offer as much flexibility as `ggplot` for adding other distributions or density lines to the same chart. 
+
+For that, we will head to the tidyverse and use `ggplot2` on our tidy `tibble` `portfolio_returns_tq_rebalanced_yearly`.
+
+```{r}
+# Make so all titles centered in the upcoming ggplots
+theme_update(plot.title = element_text(hjust = 0.5))
+
+portfolio_returns_tq_rebalanced_yearly %>% 
+  ggplot(aes(x = returns)) + 
+  geom_histogram(alpha = 1, binwidth = .01, fill = "cornflowerblue", color = "cornflowerblue")
+```
+
+Let's try to compare the portfolio distribution to that of our assets. Use the alpha argument to make the asset histograms a bid faded, since there are more of them and the portfolio return is what we really want to see.
+
+```{r}
+portf_asset_returns_hist <- 
+  ggplot(data = asset_returns_long, aes(x = returns, fill = asset)) + 
+  geom_histogram(alpha = 0.15, binwidth = .01) +
+  geom_histogram(data = portfolio_returns_tq_rebalanced_yearly, fill = "cornflowerblue") +
+  ggtitle("Monthly Returns Since 2005")
+
+portf_asset_returns_hist
+```
+
+
+Maybe we don't want to use a histogram, but instead want to use a density line to visualize the various distributions. We can use the `stat_density(geom = "line", alpha = 1)` function to do this. The `alpha` argument is selecting a line thickness. Let's also add a label to the x and y axis with the `xlab` and `ylab` functions.
+
+```{r}
+
+portfolio_returns_tq_rebalanced_yearly %>% 
+  ggplot(aes(x = returns)) +
+  stat_density(geom = "line", alpha = 1, colour = "cornflowerblue") +
+  ggtitle("Portfolio Monthly Returns Since 2005") +
+  xlab("monthly returns") +
+  ylab("distribution") 
+
+```
+
+That chart is quite digestible, but we can also `facet_wrap(~asset)` to break the densities out into individual charts.
+
+```{r}
+# could also combine to one for v
+
+portf_asset_returns_density <- 
+  ggplot(data =  asset_returns_long, 
+         aes(x = returns)) +
+  stat_density(geom = "line", 
+               alpha = 1,
+               aes(colour = asset)) +
+  stat_density(data = portfolio_returns_tq_rebalanced_yearly, 
+               geom = "line",
+               alpha = 1,
+               aes(colour = returns)) +
+  ggtitle("Portfolio and Asset Monthly Returns Since 2005") +
+  xlab("monthly returns") +
+  ylab("distribution") 
+
+portf_asset_returns_density
+```
+
+Now let's just put portfolio returns histogram and density on one plot.
+
+```{r}
+portfolio_returns_tq_rebalanced_yearly %>% 
+  ggplot(aes(x = returns)) +
+  geom_histogram(alpha = 1, binwidth = .01, colour = "cornflowerblue", fill = "cornflowerblue") +
+  stat_density(geom = "line", alpha = 1, color = "pink") +
+  ggtitle("Portfolio Monthly Returns Since 2005") +
+  xlab("monthly returns") +
+  ylab("distribution") +
+  # Lots of elements can be customized in the theme() function
+  theme(plot.title = element_text(colour = "cornflowerblue"), 
+        axis.text.x = element_text(colour = "cornflowerblue"), 
+        axis.text = element_text(colour = "cornflowerblue"), 
+        axis.ticks.x = element_line(colour = "cornflowerblue"), 
+        axis.text.y = element_text(colour = "cornflowerblue"), 
+        axis.ticks.y = element_line(colour = "cornflowerblue"),
+        axis.title = element_text(colour = "cornflowerblue")
+        )
+```

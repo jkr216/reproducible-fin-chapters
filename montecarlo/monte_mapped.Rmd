@@ -1,0 +1,215 @@
+---
+title: "Monte Carlo Chapter"
+output: html_notebook
+---
+
+On to simulating the growth of a dollar in our portfolio 
+
+We will revisit these steps in more detail below but briefly we will: 
+
+1) Assume our returns are normally distributed
+2) With mean and standard deviation as previously calculated
+3) Choose a number of months to simulate and the number of times to run the simulation
+4) Write functions to run those simulations in several equivalent ways
+5) Visualize our results
+
+Of those 5 steps, number is the only one that requires new substantive work. The other 4 steps build on what we have already done (step 4 does, too, but it's a different application). 
+
+The first step is a crucial one and it bears a bit more discussion.  We make an assumption that the distribution of portfolio returns are normal.  We have done plenty of visualizing of those returns and examined the skewness and kurtosis to see to what extent the returns are not normal. Is the assumption correct? Are the returns normally distributed? For our purposes, we will say yes - but the empirical question of whether we are right or wrong is not the focuso of this book. Rather, the more important point for making our work reproducible is to explicitly declare this assumption, explain where it came from (our work on portfolio returns) and discuss any weaknesses (maybe high skewness or kurtosis which we have already discussed).  The goal is for a team member or end consumer to understand the assumption be able to reproduce any evidence for or against it, and decide independently if the assumption is valid enough to support our simulation.  
+
+On timing: very important to cover this before the simulation results are presented else they will be totally overwhelmed.
+
+What's needed? 
+1) price history
+2) convert to log returns
+3) get mean and st dev if are using normal for simulations
+4) first price
+5) the function to run them
+6) visualize with ggplot (add a mean line? or something? filter to min max mean, get creative here)
+7) Cool use case: 
+sp500, by sector, or by etf, run the simulations, then joy plot density
+
+
+```{r}
+library(tidyquant)
+library(tidyverse)
+load("~/reproducible-fin-chapters/book-data.Rdata")
+```
+
+Let's start by using our mean and standard deviation calcuation to create simulated monthly returns.  We will use the `rnorm()` function to sample from a distribution with mean equal to `mean(portfolio_returns_tq_rebalanced_monthly$returns)` and standard deviation equal to `sd(portfolio_returns_tq_rebalanced_monthly$returns)`.  How many times should we draw from this distribution? We are usin monthly returns and 120 months is 10 years - that feels like a good amount of time to simulate.  
+
+```{r}
+mean <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
+stddev <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
+
+simulated_monthly_returns <- rnorm(120, mean, stdev)
+```
+
+Have a quick look at the simulated monthly returns. 
+
+```{r}
+head(simulated_monthly_returns)
+tail(simulated_monthly_returns)
+```
+
+We want to simulate the growth of a dollar so the first value should be 1. Also, very similar to how we calculated the growth of a dollar in our portfolio, we wan to add a 1 to each of our monthly returns. This will allow us to run cumulative functions.
+
+```{r}
+simulated_tibble <- tibble(c(1, 1 + simulated_monthly_returns))
+
+head(simulated_tibble)
+```
+
+That object is now ready to be converted into the cumulative growth of a dollar. We can use either `accumulate()` from `purrr` or `cumprod()`. Let's use both of them and confirm consistent, reasonable results. 
+
+```{r}
+
+
+simulated_tibble %>% 
+    `colnames<-`("returns") %>%
+    mutate(growth1 = accumulate(returns, function(x, y) x * y),
+           growth2 = accumulate(returns, `*`),
+           growth3 = cumprod(returns)) %>% 
+    select(-returns) %>% 
+  slice(c(115:120))
+```
+
+The results are the same. Are they reasonable? This simulation indicates our portfolio doubled in size over the simulated future 10 years, implying an annual compounded growth of 7%. That seems reasonable but we've run just one simulation. Let's run more!
+
+First, we will build several simulation functions. Each function needs 4 arguments: N for the number of months to simulate, init_value for the starting value (we used $1 above) and the mean/standard deviation to create draws from a normal distribution. 
+
+
+```{r}
+
+simulation_accum_1 <- function(init_value, N, mean, stdev) {
+    tibble(c(init_value, 1 + rnorm(N, mean, stdev))) %>% 
+    `colnames<-`("returns") %>%
+    mutate(growth = accumulate(returns, function(x, y) x * y)) %>% 
+    select(growth)
+}
+
+simulation_accum_2 <- function(init_value, N, mean, stdev) {
+  tibble(c(init_value, 1 + rnorm(N, mean, stdev))) %>% 
+    `colnames<-`("returns") %>%
+  mutate(growth = accumulate(returns, `*`)) %>% 
+  select(growth)
+}
+
+
+simulation_cumprod <- function(init_value, N, mean, stdev) {
+  tibble(c(init_value, 1 + rnorm(N, mean, stdev))) %>% 
+    `colnames<-`("returns") %>%
+  mutate(growth = cumprod(returns)) %>% 
+  select(growth)
+}
+
+
+simulation_confirm_all <- function(init_value, N, mean, stdev) {
+  tibble(c(init_value, 1 + rnorm(N, mean, stdev))) %>% 
+    `colnames<-`("returns") %>%
+    mutate(growth1 = accumulate(returns, function(x, y) x * y),
+           growth2 = accumulate(returns, `*`),
+           growth3 = cumprod(returns)) %>% 
+    select(-returns)
+}
+```
+
+I included a `confirm_all` function at the end that we will use to make sure the 3 other functions return the same thing. We'll pass 10 months to the other three substantive portions
+
+```{r}
+simulation_confirm_all(1, 10, mean, stdev)
+```
+
+confirmed. 
+
+Now we are ready to run more than one simulation. 
+```{r}
+sims <- 51
+starts <- 
+  rep(1, sims) %>%
+  set_names(paste("sim", 1:sims, sep = ""))
+```
+
+```{r}
+
+monte_carlo_simd_1 <- 
+  map_dfc(starts, simulation_accum_1, N = 120, mean = mean, stdev = stdev) %>% 
+  mutate(month = seq(1:nrow(.))) %>% 
+  select(month, everything()) %>% 
+  `colnames<-`(c("month", names(starts)))
+
+monte_carlo_simd_1 %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>% 
+  ggplot(aes(x = month, y = growth, color = sim)) + 
+  geom_line() +
+  theme(legend.position="none")
+```
+
+```{r}
+
+sim_summary <- 
+monte_carlo_simd_1 %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>% 
+  summarise(final = last(growth)) %>% 
+  summarise(
+            max = max(final), 
+            min = min(final),
+            median = median(final))
+sim_summary
+```
+
+
+```{r}
+probs <- c(.005, .025, .25, .5, .75, .975, .995)
+
+sim_final_quantile <- 
+monte_carlo_simd_1 %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>% 
+  summarise(final = last(growth))
+
+quantile(sim_final_quantile$final, probs = probs) %>% round(2)
+```
+
+Huzzah! Our 95% confidence interval is between a 36% percent return and 185% percent return. 
+
+Our .5% super outlier negative result is still a 20% growth. 
+
+Are we the Brunelleschi of portfolio construction? Or have wevbased our assumptions off of returns during an unstoppable bull market that's been chugging along since well before 2013? When we get to Shiny and let user choose different start dates, we will find out the hard but inescapable truth about our own genius. 
+
+We can isolate or eliminate some of the noise from our simulations and pull out certain time series. We have already calculated the maximum, minimum and median end growth values. Let's use ggplot to isolate just the simulations for those three. 
+
+```{r}
+??refs
+monte_carlo_simd_1 %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>%
+  filter(
+      any(growth == sim_summary$max) || 
+      any(growth == sim_summary$median) ||
+      any(growth == sim_summary$min)) %>% 
+  ggplot(aes(x = month, y = growth)) + 
+  geom_line(aes(color = sim))
+```
+
+
+```{r}
+ 
+monte_carlo_simd_1 %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>% 
+  summarise(final = last(growth)) %>% 
+  ggplot(aes(x = final)) +
+  geom_histogram(color = "cornflowerblue", fill = "cornflowerblue", binwidth = .1)
+```
+
+
+## Shiny
+1) build portfolio
+2) get returns, mean, std dev
+3) display results
+4) display high, low, median
+5) histogram of or scatter of end values? 
+6) Quantiles

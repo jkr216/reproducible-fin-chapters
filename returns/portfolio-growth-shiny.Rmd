@@ -1,0 +1,214 @@
+---
+title: "Portfolio Growth Shiny"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+---
+
+
+```{r setup, message = FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(highcharter)
+library(tidyquant)
+library(timetk)
+library(shiny)
+```
+
+Sidebar {.sidebar}
+=====================================
+  
+```{r}
+
+fluidRow(
+  column(6,
+  textInput("stock1", "Stock 1", "SPY")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(6,
+  textInput("stock2", "Stock 2", "EFA")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock3", "Stock 3", "IJS")),
+  column(5,
+  numericInput("w3", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock4", "Stock 4", "EEM")),
+  column(5,
+  numericInput("w4", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock5", "Stock 5", "AGG")),
+  column(5,
+  numericInput("w5", "Portf. %", 10, min = 1, max = 100))
+)
+
+
+fluidRow(
+  column(6,
+  dateInput("date", "Starting Date", "2010-01-01", format = "yyyy-mm-dd")),
+  column(5,
+  selectInput("rebalance", "rebal freq",
+              c("Yearly" = "years",
+                "Monthly" = "months",
+                "Weekly" = "weeks"))
+))
+
+actionButton("go", "Submit")
+
+# The prices object will hold our daily price data.
+prices <- eventReactive(input$go, {
+  
+  symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
+  
+  getSymbols(symbols, src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+})
+
+
+portfolio_growth_xts <- eventReactive(input$go, {
+  prices <- prices()
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+
+# XTS world
+
+prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
+asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
+
+portfolio_growth_xts <- 
+  Return.portfolio(asset_returns_xts, 
+                   wealth.index = 1, 
+                   weights = w, 
+                   rebalance_on = input$rebalance) %>% 
+  `colnames<-`("growth")
+
+})
+
+portfolio_byhand <- eventReactive(input$go, {
+  
+  prices <- prices()
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  asset_returns_long <- 
+      prices %>% 
+      to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+      tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+      gather(asset, returns, -date) %>% 
+      group_by(asset) %>%  
+      mutate(returns = (log(returns) - log(lag(returns))))
+
+  portfolio_byhand <- 
+    asset_returns_long %>% 
+    tq_portfolio(assets_col = asset, 
+               returns_col = returns, 
+               weights = w,
+               col_rename = "returns")
+  
+
+
+})
+
+```
+
+Portfolio Performance
+=====================================  
+
+Row {data-height=600}
+-----------------------------------------------------------------------
+
+### Growth of Dollar
+
+```{r}
+renderHighchart({
+  
+  highchart(type = "stock") %>%
+  hc_title(text = "Growth of a Dollar") %>%
+  hc_add_series(portfolio_growth_xts(), name = "Dollar Growth", color = "cornflowerblue") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE) 
+  
+})
+```
+
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+
+### ggplot Growth 
+
+```{r}
+renderPlot({
+ 
+portfolio_growth_xts() %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>% 
+    ggplot(aes(x = date, y = growth)) +
+    geom_line(aes(y = growth), color = "cornflowerblue") +
+    ylab("dollars") + 
+    ggtitle("Growth of Dollar over time")
+})
+```
+
+
+### Scatterplot
+
+```{r, message = FALSE}
+renderPlot({
+ 
+  portfolio_byhand <- portfolio_byhand()
+  
+  ggplot(data = portfolio_byhand, aes(x = date)) +
+    geom_point(aes(y = returns), color = "cornflowerblue") +
+  ylab("percent monthly returns")
+})
+```
+
+
+### Histogram
+
+```{r}
+renderPlot({
+
+  portfolio_byhand <- portfolio_byhand()
+  
+  portfolio_byhand %>% 
+    ggplot(aes(x = returns)) +
+    geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue")
+  
+})
+```
+
+### Density
+
+```{r}
+renderPlot({
+
+  portfolio_byhand <- portfolio_byhand()
+  
+  portfolio_byhand %>% 
+    ggplot(aes(x = returns)) +
+    stat_density(geom = "line", size = 1, color = "cornflowerblue") 
+})
+
+```
+
+
+
+
+

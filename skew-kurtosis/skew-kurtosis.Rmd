@@ -1,0 +1,195 @@
+---
+title: "Skew and Kurtosis"
+output: html_notebook
+---
+
+```{r setup}
+library(tidyquant)
+library(tidyverse)
+library(timetk)
+library(tibbletime)
+```
+
+In previous posts [here](http://www.reproduciblefinance.com/2017/07/12/introduction-to-volatility/) and [here](http://www.reproduciblefinance.com/2017/07/18/introduction-to-rolling-volatility/) and [here](http://www.reproduciblefinance.com/2017/07/21/visualizing-portfolio-volatility/) and ... [here](http://www.reproduciblefinance.com/2017/09/18/asset-contribution-to-portfolio-volatility/), we spent quite a bit of time on portfolio volatility, using the standard deviation of returns as a proxy for volatility. Today we will begin to consider two additional statistics that aid on our understanding of return dispersion: skewness and kurtosis. Beyond being fancy words that impress people who haven't crammed for CFA level 1, these two concepts are both important and fascinating for lovers of returns distributions. Let's get to it! 
+
+### Skew
+
+Skewness is the degree to which returns are asymetric around the mean.  Since a normal distribtuion is symmetric around the mean, skewness can be taken as one measure of how returns are not distributed normally. Why does skewness matter? If portfolio returns are right, or positively, skewed, it implies numerous small negative returns and a few large positive returns.  If portfolio returns are left, or negatively, skewed, it implies numerous small positive returns and few large negative returns. The phrase "large negative returns" should trigger pavlovian sweating for investors, even if it's preceded by a diminuitve modifier like "just a few". For a portfolio manager, or any investor, a negatively skewed distribution of returns implies a portolio at risk of rare but large losses. This makes us nervous and is a bit like saying, I'm healthy, except for my occasional massive heart attack.
+
+Why do we need skew? Doesn't standard deviation already address risk? Yes, standard deviation does, but have a look at the equation for sd: 
+
+$$Standard~Deviation=\sqrt{\sum_{t=1}^n (x_i-\overline{x})^2/n}$$
+
+
+And here's the equation for skew: 
+
+$$Skew=\sum_{t=1}^n (x_i-\overline{x})^3/n \bigg/ (\sum_{t=1}^n (x_i-\overline{x})^2/n)^{3/2} $$
+
+The skew numerator raises distance from the mean to the third power - it gives plenty of weight to any outliers. There's plenty of background on skew out there.
+
+We will start by calculating the skewness of our portfolio and emphasizing different methodologies and reproducibility. 
+
+OK, that's worked fine but let's do some more exploring because our portfolio doesn't have much skew, this isn't a great example. How could we find a portfolio or stock that does have skew? 
+
+We could alter our weights? We could search all of the S&P500 for the top skews, and do that by sector. 
+
+
+```{r}
+symbols <- c("^GSPC", "^IRX")
+#names <- c("spy", "treas")
+
+index_weekly_returns <- symbols %>% 
+  tq_get(get = "stock.prices", from = "1993-01-01") %>% 
+  group_by(symbol) %>% 
+  tq_transmute(adjusted, periodReturn, period = "weekly", col_rename = "returns")
+
+
+mult_weekly_returns <- tq_repeat_df(index_weekly_returns, n = 12)
+
+weights <-  c(0.05, 0.95,
+              0.10, 0.90,
+              0.15, 0.85,
+              0.20, 0.80,
+              0.60, 0.40,
+              0.65, 0.35,
+              0.70, 0.30,
+              0.75, 0.25,
+              0.80, 0.20,
+              0.85, 0.15,
+              0.90, 0.10,
+              0.95, 0.05)
+
+
+weights_table <- tibble(symbols) %>%
+    tq_repeat_df(n = 12) %>%
+    bind_cols(tibble(weights)) %>%
+    group_by(portfolio)
+
+levels <- c("date", paste("risk_level_", 1:12, sep = ""))
+
+portfolio_returns_risk_levels <- 
+  mult_weekly_returns %>%
+  tq_portfolio(assets_col = symbol,
+               returns_col = returns,
+               weights = weights_table,
+               col_rename = NULL,
+               wealth.index = FALSE) %>% 
+  spread(portfolio, portfolio.returns) %>% 
+  `colnames<-`(levels)
+
+```
+
+```{r}
+portfolio_returns_risk_levels %>%
+  select(date, risk_level_1, risk_level_6, risk_level_12) %>% 
+  gather(risk, return, -date) %>% 
+  ggplot(aes(x = date, y = return, color = risk)) +
+  geom_point() +
+  facet_wrap(~risk)
+```
+
+
+```{r}
+portfolio_returns_risk_levels %>%
+  select(date, risk_level_1, risk_level_6, risk_level_12) %>%
+  gather(risk, return, -date) %>% 
+  ggplot(aes(x = return, color = risk)) +
+  geom_density() +
+  facet_wrap(~risk)
+```
+ 
+```{r}
+portfolio_returns_risk_levels %>%
+  select(date, risk_level_1, risk_level_6, risk_level_12) %>%
+  gather(risk, return, -date) %>% 
+  ggplot(aes(x = return, color = risk)) +
+  geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue") +
+  facet_wrap(~risk)
+
+```
+
+
+```{r}
+index_monthly_returns <- symbols %>% 
+  tq_get(get = "stock.prices", from = "1990-01-01") %>% 
+  group_by(symbol) %>% 
+  tq_transmute(adjusted, periodReturn, period = "monthly", col_rename = "returns")
+
+
+mult_monthly_returns <- tq_repeat_df(index_monthly_returns, n = 12)
+
+
+monthly_returns_risk_levels <- 
+  mult_monthly_returns %>%
+  tq_portfolio(assets_col = symbol,
+               returns_col = returns,
+               weights = weights_table,
+               col_rename = NULL,
+               wealth.index = FALSE) %>% 
+  spread(portfolio, portfolio.returns) %>% 
+  `colnames<-`(levels)
+```
+
+```{r}
+monthly_returns_risk_levels %>%
+  select(date, risk_level_1, risk_level_6, risk_level_12) %>% 
+  gather(risk, return, -date) %>% 
+  ggplot(aes(x = date, y = return, color = risk)) +
+  geom_point() +
+  facet_wrap(~risk)
+```
+
+```{r}
+monthly_returns_risk_levels %>%
+  select(date, risk_level_1, risk_level_6, risk_level_12) %>%
+  gather(risk, return, -date) %>% 
+  ggplot(aes(x = return, color = risk)) +
+  geom_density() +
+  facet_wrap(~risk)
+```
+
+```{r}
+monthly_returns_risk_levels %>%
+  select(date, risk_level_1, risk_level_6, risk_level_12) %>%
+  gather(risk, return, -date) %>% 
+  ggplot(aes(x = return, color = risk)) +
+  geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue") +
+  facet_wrap(~risk)
+
+```
+
+```{r}
+    # compute the observed moments of x around the mean
+    n <- length(x) 
+    mean <- mean(x)
+    first_moment <- sum((x - mean)^1)/n
+    second_moment <- sum((x - mean)^2)/n
+    third_moment <- sum((x - mean)^3)/n
+    fourth_moment <- sum((x - mean)^4)/n
+
+    skew <- third_moment/(second_moment)^(3/2)
+    kurt <- (fourth_moment/second_moment^2) - 3
+
+```
+
+```{r}
+    # compute the observed moments of x around the mean
+    x <- portfolioComponentReturns$SPY
+    n <- length(x) 
+    mean <- mean(x)
+    first_moment <- sum((x - mean)^1)/n
+    
+    second_moment <- (sum((x - mean)^2)/n)
+    third_moment <- (sum((x - mean)^3)/n)
+    fourth_moment <- (sum((x - mean)^4)/n)
+
+    skew <- (sum((x - mean)^3)/n)/((sum((x - mean)^2)/n))^(3/2)
+    kurt <- ((sum((x - mean)^4)/n)/((sum((x - mean)^2)/n)^2)) - 3
+roll_k <- rollapply(x, 30,  kurtosis)
+roll_skew <- 
+skewness(x)
+kurtosis(x)
+```
+
+
+

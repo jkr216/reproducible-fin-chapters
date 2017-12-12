@@ -1,0 +1,199 @@
+---
+title: "Sortino Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+```
+
+Today, we begin a project to build a Shiny application that allows a user to build a portfolio and calculate/visualize its Sortino Ratio. 
+
+The final app is viewable [here](https://jkr216.shinyapps.io/Sortino-Shiny/) but we'll spend the next 3 posts contructing that.
+
+By way of brief background and motivation for this projct, the Sortino Ratio is a measure of the return/risk ratio of a portfolio and is an important tool for evaluating the risk adjusted returns of a portfolio and the skill of the portfolio manager. A higher Sortino indicates a portfolio manager who is generating higher returns per unit of risk absorbed.  Identifying better performing portfolios and portfolio managers is crucial for quants, data scientist and analysts at banks, endowments, investment advisors, funds of funds, hedge funds - all enterprise-level participants in the world of asset management.  From a data science perspective, we want to accomplish this using a reproducible work flow and an appealing, digestible end product.  As someone who used to work in finance and now works at RStudio, I find a Sortino Ratio Shiny app to be a thrilling combination of portfolio theory, statistical analysis and data visualization. Let's get to it!
+
+The Sortino Ratio eqation is as follows:   
+
+$$Sortino~Ratio_{portfolio}=\frac{(\overline{Return_{portfolio}-MAR})}{\sqrt{\sum_{t=1}^n min(R_t-MAR,~0)^2}/n}$$
+
+The denominator in that equation (called the Downside Deviation, semi-deviation or downside risk) can be thought of as the deviation of the returns that fall below some target rate of return for the portfolio. That target rate is called the Minimum Acceptable Rate, or MAR. The numerator is the mean portfolio return minus the MAR and can be thought of as excess returns. 
+
+The theory behind the Sortino Ratio is that the riskiness of a portfolio is better measured by the deviation of returns *below* a target return, instead of by the standard deviation of all returns.  This stands in contradistinction to the more commonly used Sharpe Ratio, which measures return/risk by the ratio of the returns above the risk free rate divided by the standard deviation of *all* returns.  By way of history, Harry Markowitz, Nobel laureate and father of modern portfolio theory, noted that downside deviation might be a better measure of risk than the standard deviation of all returns, but its calculation was computationally too expensive[^1] (it was 1959, if he only he'd had R on his laptop).
+
+[^1]: Markowitz, Harry. Portfolio Selection: Efficient Diversification of Investments, John Wiley & Sons, 1959.
+
+Frank Sortino's original article on downside deviation, "On the Use and Misuse of Downside Risk," was published in the [Journal of Portfolio Management](http://www.iijournals.com/doi/abs/10.3905/jpm.1996.35) in 1996 but you'll need a paid subscription to access that.
+
+More background is available from the [CME group](http://www.cmegroup.com/education/files/sortino-a-sharper-ratio.pdf), [Red Rock Capital](http://www.redrockcapital.com/Sortino__A__Sharper__Ratio_Red_Rock_Capital.pdf) and [CFA pubs](http://www.cfapubs.org/doi/pdf/10.2469/ipmn.v2012.n1.1).
+
+As for our project, we will proceed in 3 steps:
+
+    1. Build a portfolio and calculate the Sortino Ratio using 3 methods (today's post)
+    2. Visualize the Sortino Ratio using ggplot and highcharter (next week)
+    3. Wrap to an interactive Shiny App (in two weeks)
+
+When working with the Sortino Ratio, we have two critical choices: how to construct the portfolio using assets and weights, and which MAR to use.  Our Shiny application at project's end will allow a user to make these choices and see how the Sortino Ratio changes.  For today, we will go with the following portfolio and MAR: 
+
+Assets and Weights
+
+    + SPY (S&P500 fund) weighted 25%
+    + EFA (a non-US equities fund) weighted 25%
+    + IJS (a small-cap value fund) weighted 20%
+    + EEM (an emerging-mkts fund) weighted 20%
+    + AGG (a bond fund) weighted 10%
+    
+Minimum Acceptable Rate
+    
+    + MAR = .008 or .8%
+    + Note we are holding this portfolio to a higher standard than being above 0%.
+
+Let's load our packages: 
+
+```{r setup}
+# first install the packages if they are not already installed in your environment.
+# install.packages("tidyverse")
+# install.packages("tidyquant")
+# install.packages("timetk")
+
+library(tidyverse)
+library(tidyquant)
+library(timetk)
+```
+
+First, we import daily prices for the five ETFs, using `getSymbols` to grab the data, `map(~Ad(get(.)))` to select adjusted prices only, and `reduce(merge)` to mash our five prices into one `xts` object.
+
+```{r get stock prices function}
+# The symbols vector holds our tickers. 
+symbols <- c("SPY","EFA", "IJS", "EEM","AGG")
+
+# The prices object will hold our raw price data throughout this book.
+prices <- 
+  getSymbols(symbols, src = 'yahoo', from = "2005-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+```
+
+Next we choose our asset weights and assign them to the variable `w`. We will also assign the MAR of .008 to the variable `MAR`.
+
+```{r}
+w <- c(0.25, 0.25, 0.20, 0.20, 0.10)
+
+MAR <- .008
+
+```
+
+Next we convert those to monthly log returns, using two methods. For the first method, we stay in the `xts` world.
+
+```{r}
+
+prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
+asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
+```
+
+We invoke the function `Return.portfolio(asset_returns_xts, weights = w)` from `PerformanceAnalytics` and pass in our asset returns and weights. This will return portfolio returns in `xts` format.
+
+```{r}
+
+portfolio_returns_xts <- Return.portfolio(asset_returns_xts, weights = w)
+```
+
+We now have an `xts` object of portfolio returns called `portfolio_returns_xts`.
+
+Now let's perform the same transformations in the tidy world.
+
+First, we go from daily prices to monthly asset returns.
+
+```{r}
+# Tidyverse method, to long, tidy format
+asset_returns_long <- 
+  prices %>% 
+  to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+  tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+  gather(asset, returns, -date) %>% 
+  group_by(asset) %>%  
+  mutate(returns = (log(returns) - log(lag(returns))))
+```
+
+For portfolio returns, we call the `tq_portfolio` function from `tidyquant`.
+
+```{r}
+
+portfolio_returns_tidy <- 
+  asset_returns_long %>% 
+  tq_portfolio(assets_col = asset, 
+               returns_col = returns, 
+               weights = w,
+               col_rename = "returns")
+```
+
+We now have a tidy `tibble` object of portfolio returns called `portfolio_returns_tidy`.
+
+Let's take a quick peek at both of our objects for a sanity check.
+
+```{r}
+head(portfolio_returns_xts)
+head(portfolio_returns_tidy)
+```
+
+There is one big difference that we will handle below: for January of 2005,  `portfolio_returns_tidy` contains `0.00`, and `portfolio_returns_xts` excludes the observation completely. That will make a difference because 0.00 is below our MAR.
+
+On to the Sortino analysis.  Calculating the Sortino Ratio in the `xts` world is almost depressingly convenient. We call `SortinoRatio(portfolio_returns_xts, MAR = MAR)`, passing our portfolio returns and MAR tot he built-in function from `PerformanceAnalytics`.
+
+```{r}
+sortino_xts <- 
+  SortinoRatio(portfolio_returns_xts, MAR = MAR) %>% 
+  `colnames<-`("ratio")
+```
+
+From a substantive perspective, we could stop here and start visualizing with `highcharter`. 
+
+Instead, we will run the calculation by-hand, implementing the equation for the Sortino Ratio via pipes and `dplyr`.  It's not a verbose piped workflow. In short, we call `summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))`.  
+
+Note the use of `slice(-1)` to remove the first row. I want to delete that first 0.00 for January of 2005 to be consistent with the `xts` operations, but that is an important choice and one that could be questioned. Perhaps we should instead re-wrangle our `xts` object to make it consistent? Either way, we want to be explicit about the choice so that others can reproduce this work later.
+
+```{r}
+sortino_byhand <- 
+  portfolio_returns_tidy %>% 
+  slice(-1) %>%
+  summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))
+
+
+sortino_byhand
+
+```
+
+
+Now on to `tidyquant`, which allows us to apply the `SortinoRatio` function from `PerformanceAnalytics` to a `tibble`. As long as we are passing it the same data as we passed originally with the `xts` object, we expect the same result.
+
+
+```{r}
+sortino_tidy <- 
+  portfolio_returns_tidy %>%
+  slice(-1) %>% 
+  tq_performance(Ra = returns, 
+                 performance_fun = SortinoRatio, 
+                 MAR = MAR,
+                 method = "full") %>% 
+  `colnames<-`("ratio")
+```
+
+Let's compare our 3 Sortino objects. 
+
+```{r}
+sortino_xts[1]
+sortino_byhand$ratio
+sortino_tidy$ratio
+```
+
+We have consistent results from `xts`, `tidyquant` and our by-hand piped calculation.  It might feel like a lot of work to get the same result three times but it forced us to look under the hood of the built-in functions and it might serve us well in the future should we have data or a project that fits better with one of the three methods.  
+
+That's all for today. Next time we will visualize the Sortino Ratio and its data slicing implications using `ggplot2` and `highcharter`. Thanks for reading.
+
+
