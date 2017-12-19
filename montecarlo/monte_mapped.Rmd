@@ -1,6 +1,8 @@
 ---
 title: "Monte Carlo Chapter"
-output: html_notebook
+output:
+  html_notebook: default
+  pdf_document: default
 ---
 
 On to simulating the growth of a dollar in our portfolio 
@@ -233,16 +235,15 @@ quantiles <-
 quantiles[,1:6]
 ```
 
-Huzzah! Our 95% confidence interval for the growth of a dollar is between `r quantiles[,2]` and `r quantiles[,2]`. 
+Huzzah! Our 95% confidence interval for the growth of a dollar is between `r quantiles[,2]` and `r quantiles[,6]`. 
 
 Our .5% super outlier negative result is `r quantiles[,1]`. 
 
 Are we the Brunelleschi of portfolio construction? Or have we based our assumptions off of returns during an unstoppable bull market that's been chugging along since well before 2013? When we get to Shiny and let users choose different start dates, we will find out the hard but inescapable truth about our own genius and how it relates to bull markets.
 
-We can isolate or eliminate some of the noise from our simulations and pull out certain time series. We have already calculated the maximum, minimum and median end growth values. Let's use ggplot to isolate just the simulations for those three. 
+We can isolate or eliminate some of the noise from our simulations and pull out certain time series. We have already calculated the maximum, minimum and median end growth values. Let's use `filter(any())` from `dplyr` to isolate those three simulations and then visualizd with `ggplot`. 
 
 ```{r}
-??refs
 monte_carlo_simd_1 %>% 
   gather(sim, growth, -month) %>% 
   group_by(sim) %>%
@@ -262,8 +263,9 @@ monte_carlo_simd_1 %>%
   group_by(sim) %>% 
   summarise(final = last(growth)) %>% 
   ggplot(aes(x = final)) +
-  geom_histogram(color = "cornflowerblue", fill = "cornflowerblue", binwidth = .1)
+  geom_histogram(color = "cornflowerblue", fill = "cornflowerblue", binwidth = .05)
 ```
+
 
 
 ## Shiny

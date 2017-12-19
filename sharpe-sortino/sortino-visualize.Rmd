@@ -14,8 +14,7 @@ Today, we will make two additions to assist in our data visualization. We will a
 
 # Tibble object
 sortino_byhand <- 
-  portfolio_returns_tidy %>% 
-  slice(-1) %>% 
+  portfolio_returns_tidy %>%
   mutate(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.))) %>% 
   # Add two new columns to help with ggplot.
   mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA)) %>%

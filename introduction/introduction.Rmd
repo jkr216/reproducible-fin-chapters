@@ -1,0 +1,44 @@
+---
+title: "Introduction"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+What is reproducible finance? 
+
+*Reproducible Finance* is a philosophy for how to do build a data science practice in the world of finance. The world of finance is changing, embracing data science and technology, but there's no road map for how to do that.
+
+R code is important, and the bulk of this book is dedicated to writing that R code. However, the reason this book is not called *R Code in Finance* is that I will frequently emphasize reproducibility, reusability, lean processes, experimentation and other best practices that relate to but go beyond writing code.
+
+By book's end, an analyst or aspiring analyst at a bank or hedge fund will have the technical foundation to begin building a data science practice that delivers an advantage over slower moving firms. Readers will gain an edge on the competition through the use of data science.
+
+Reproducible finance is doing data science the right way in the financial world. 
+
+It consists of 4 pillars. 
+
+Technology is the 1st pillar and that will be the primary focus of this book. By technology, I mean the R code and algorithms that are used to run tests and calculations, build visualizations, and assist humans in making decisions.  Are there other technologies besides R code? Yes, but this book is not about those.
+
+Humans are the second pillar. By humans, I primarily mean the team, including the leaders and recruiters of the team, that are using the technology to gather and clean data, build models, test hypotheses and deliver actionable results to the rest of a financial instiution.  
+
+
+Why is reproducible finance important? 
+
+This book: 
+
+What is covered in this book? 
+- returns, risk, kurt, portfolio theory
+- lots of visualizations
+- redundancy
+- shiny
+
+What is not covered in this book? 
+
+The goal of this book is to demonstrate several, reproducible methods for calculating and visualizing the substance. We will not delve into the math that underlies the substance or delve deep into the portfolio theory. That stuff is important and highly recommended (and fascinating!). For readers who want to explore those concepts, I recommend Eric Zivot's "Financial Analytics with R" (see if you can port his code over to one of our methods). 
+
+
+We also won't delve deep into the R programming language. Garret Grolemund and Hadley's Wickham's "R for Data Science" is ~~the Bible~~ a phenomenol source for that material.
+
+Shiny? 
+A brief intro - what is shiny, why is it important
+how does it fit into this book: www.reproduciblefinance.com/shiny

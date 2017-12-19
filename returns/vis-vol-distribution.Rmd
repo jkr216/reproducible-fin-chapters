@@ -1,0 +1,19 @@
+---
+title: "Visualizing vol with returns distribution"
+output: html_notebook
+---
+
+```{r setup, include = FALSE}
+library(tidyquant)
+library(tidyverse)
+library(timetk)
+library(tibbletime)
+library(highcharter)
+
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+
+load("~/reproducible-fin-chapters/book-data.Rdata")
+```
+
+
+

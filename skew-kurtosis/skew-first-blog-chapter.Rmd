@@ -361,18 +361,19 @@ For tidy, we again substitute functions, and need to use the formula for kurtosi
 kurt_tidy <-
   portfolio_returns_tq_rebalanced_monthly %>% 
   summarise(
-            kurt = kurtosis(returns),
+            kurt_builtin = kurtosis(returns),
             kurt_byhand = 
               ((sum((returns - mean(returns))^4)/length(returns))/
               ((sum((returns - mean(returns))^2)/length(returns))^2)) - 3) %>% 
-  select(kurt, kurt_byhand)
+  select(kurt_builtin, kurt_byhand)
 ```
 
 Let's confirm that we have consistent calculations. 
 
 ```{r}
 kurt_xts
-kurt_tidy
+kurt_tidy$kurt_builtin
+kurt_tidy$kurt_byhand
 ```
 
 We have consistent results from `xts` and the tidy world, and we were able to reuse our code from above to shorten the development time here. 
@@ -392,13 +393,11 @@ sd_neg_shaded_area <-
   ggplot_build(portfolio_density_plot)$data[[1]] %>% 
   filter(x < sd_neg)
 
-#portfolio_kurt_plot_shaded <- 
   portfolio_density_plot + 
   geom_area(data = sd_pos_shaded_area, aes(x = x, y = y), fill="pink", alpha = 0.5) +
   geom_area(data = sd_neg_shaded_area, aes(x = x, y = y), fill="pink", alpha = 0.5) +
   scale_x_continuous(breaks = pretty_breaks(n = 10))
 
-#portfolio_kurt_plot_shaded
 ```
 
 That density chart is a good look at how there seem to be a higher number of extreme negative returns, but the extreme positive returns are of a greater magnitude, mostly greater than .06.
@@ -407,8 +406,8 @@ And finally we can calculate and chart the rolling kurtosis as we did above.
 
 ```{r}
 window <- 6
-rolling_kurt_xts <- na.omit(rollapply(portfolio_returns_xts_rebalanced_monthly, window, 
-                           function(x) kurtosis(x)))
+rolling_kurt_xts <- na.omit(apply.rolling(portfolio_returns_xts_rebalanced_monthly, window, 
+                           fun = kurtosis))
 ```
 
 Now we pop that `xts` object into `highcharter` for a visualization.
@@ -420,13 +419,13 @@ highchart(type = "stock") %>%
   hc_add_series(rolling_kurt_xts, name = "Rolling kurtosis", color = "cornflowerblue") %>%
   hc_yAxis(title = list(text = "kurtosis"),
            opposite = FALSE,
-           max = 3, 
-           min = -3) %>% 
+           max = .2, 
+           min = -.2) %>% 
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE) 
 ``` 
 
-Interestingly, this portfolio has displayed negative rolling kurtosis for most of its life, except during the first half of 2017. 
+Interestingly, this portfolio has displayed positive rolling kurtosis for most of its life, except during the last half of 2015 through early 2016. 
 
 Our work on kurtosis was made a lot more efficient by our work on skewness. Now let's port this to a Shiny where we will again use our previous work to speed up development. 
 
@@ -444,7 +443,7 @@ The structure and visualizations are very similar to what we built for calculati
 
 [www.reproduciblefinance.com/portfolio-growth-shiny]
 
-The differences are that for skewness and kurtosis the end user chooses a rolling window and we displaying the results of rolling functions and not the dollar growth function.
+The differences are that for skewness and kurtosis the end user chooses a rolling window and we display the results of rolling functions and not the dollar growth function.
 
 Certain features are identical, such as how to build a portfolio and choose a start date. For those shared features, we will use the exact same code, and we will add one line to allow the user to choose a window with this code: `numericInput("window", "Window", 6, min = 3, max = 20, step = 1))`.
 

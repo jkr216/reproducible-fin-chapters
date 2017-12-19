@@ -7,10 +7,15 @@ output: pdf_document
 
 ```{r setup, message = FALSE}
 webshot::install_phantomjs()
-library(tidyverse)
 library(tidyquant)
-library(highcharter)
+library(tidyverse)
 library(timetk)
+library(tibbletime)
+library(highcharter)
+
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+
+load("~/reproducible-fin-chapters/book-data.Rdata")
 ```
 
 Welcome to our chapter focused on portfolio volatility, variance and standard deviation. I realize that it's a lot more fun to ~~fantasize about~~ analyze stock returns which is why television shows and websites constantly update the daily market returns and give them snazzy green and red colors. But good ol'volatility is quite important in its own right, especially to finance geeks, aspiring finance geeks and institutional investors. If you are, might become, or might ever work with/for any of those, this chapter should at least serve as a jumping off point.
@@ -193,6 +198,45 @@ The standard deviation of monthly SPY returns is `r ijs_sd_percent`% and that of
 Fantastic, our portfolio has lower monthly volatility!
 
 
+# Visualize 
+
+```{r}
+sd <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
+mean <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
+library(scales)
+portfolio_returns_tq_rebalanced_monthly %>%
+  mutate(hist_col_red = 
+           ifelse(returns < (mean - sd), 
+                  returns, NA),
+         hist_col_green = 
+           ifelse(returns > (mean + sd), 
+                  returns, NA),
+         hist_col_blue = 
+           ifelse(returns > (mean - sd) &
+                  returns < (mean + sd),
+                  returns, NA)) %>% 
+  
+  ggplot(aes(x = date)) + 
+  
+  geom_point(aes(y = hist_col_red),
+               color = "red") +
+  
+  geom_point(aes(y = hist_col_green),
+               color = "green") +
+  
+  geom_point(aes(y = hist_col_blue),
+               color = "blue") +
+  
+  geom_hline(yintercept = (mean + sd), color = "purple", linetype = "dotted") +
+  geom_hline(yintercept = (mean-sd), color = "purple", linetype = "dotted") +
+  scale_x_date(breaks = pretty_breaks(n = 8)) +
+
+ ylab("percent monthly returns")
+```
+
+This is showing us returns over time and whether they fall below or above one standard deviation from the mean.  One observation to me is how many red or green circles we see after 2017. 0! That's zero monthly returns that are least one standard deviation from the mean. When we get to rolling volatility, we should see this reflected as a low rolling volatility through 2017. If we something different, we need to investigate.
+
+
 ## Rolling Volatility
 
 Why do we care about rolling standard deviations? We have already calculated the volatility for the entire life of the portfolio but we might miss a 3-month or 6-month period where the volatility spiked or plummeted or did both. And the longer our sample size, the more likely we are to miss something important. If we had 10 or 20 years of data and we calculated the standard deviation for the entire sample, we could, or most certainly would, fail to notice a period in which volatility was very high, and hence we would fail to ponder the probability that it could occur again. 
@@ -289,7 +333,7 @@ head(roll_portfolio_result)
 
 Have a look at the rolling standard deviations. Why is the first date August of 2013? Do any of the results stand our as unusual, when compared to the SPY results? It's hard to make the comparison until we chart them, and that's what we do in the next section
 
-## Visualizing Volatility
+## Visualizing Rolling Volatility
 Recall that we have 2 objects and we want to compare their respective rolling volatilities: 
 
 - `spy_rolling_sd` (an `xts` object of rolling SPY standard deviations)
@@ -573,12 +617,9 @@ Compare the two objects
 ```{r, message=FALSE}
 percentages_tibble_pre_built
 percentage_tibble_by_hand
-round(percentages_tibble_pre_built[4,2], 2) * 100
 ```
 
 Huzzah - our findings seem to be consistent! 
-
-While we have the tibbles in front of us, notice that EEM has a 25% weight but contributes `r (round(percentages_tibble_pre_built[4,2], 2) * 1` % to the volatility. That's not necessarily a bad thing, but we should be aware of it. 
 
 Our substantive work is done but let's turn to `ggplot` for some visualizing. 
 

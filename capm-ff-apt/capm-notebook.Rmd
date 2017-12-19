@@ -1,0 +1,75 @@
+---
+title: "CAPM Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library("dplyr")
+library("tidyr")
+library("broom")
+
+# using do()
+mtcars %>%
+  group_by(am) %>%
+  do(tidy(lm(mpg ~ wt, data = .)))
+```
+We will go with SPY as our market return. That's going to make our calculations somewhat substantively uninteresting. First, SPY is 25% of our portfolio so the beta probably won't be too far off of 1. 2nd, we have chosen assets and time period in which correlations with SPY have generally been high. 
+
+```{r}
+asset_returns_long <- asset_returns_long %>% na.omit()
+
+market_return <- asset_returns_long %>% 
+  filter(asset == "SPY") %>% 
+  select(returns)
+```
+
+CAPM by hand with dplyr, purrr and tidy
+
+The equation for the beta of each asset is: 
+
+$${\beta}_i = cov(R_i, R_m)/\sigma_m $$
+
+
+```{r}
+betas <- asset_returns_long %>% 
+  nest(-asset) %>% 
+  mutate(model = map(data, ~ lm(returns ~ market_return$returns, data = .))) %>% 
+  unnest(model %>% map(tidy)) %>% 
+  filter(term == "market_return$returns") %>% 
+  select(-term)
+```
+
+The equation for portfolio beta is the weighted sum of the asset betas:
+
+$${\beta}_{portfolio} ={\sum_{i=1}^n}W _i~{\beta}_i $$
+
+
+```{r}
+portfolio_beta <- 
+  w_1 * betas$estimate[1] + 
+  w_2 * betas$estimate[2] + 
+  w_3 * betas$estimate[3] +
+  w_4 * betas$estimate[4] +
+  w_5 * betas$estimate[5]
+```
+
+
+
+```{r}
+mkt_return_xts <- asset_returns_xts$SPY
+test <- merge(portfolio_returns_xts_rebalanced_monthly, mkt_return_xts)
+beta_builtin_xts <- CAPM.beta(portfolio_returns_xts_rebalanced_monthly, mkt_return_xts)
+```
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_return = asset_returns_dplyr_byhand$SPY) %>% 
+  na.omit() %>% 
+  tq_performance(Ra = returns, Rb = market_return, performance_fun = CAPM.beta)
+```
+ 
+ 
