@@ -40,5 +40,12 @@ The goal of this book is to demonstrate several, reproducible methods for calcul
 We also won't delve deep into the R programming language. Garret Grolemund and Hadley's Wickham's "R for Data Science" is ~~the Bible~~ a phenomenol source for that material.
 
 Shiny? 
-A brief intro - what is shiny, why is it important
-how does it fit into this book: www.reproduciblefinance.com/shiny
+Shiny is an R package that wraps R code into an interactive web application.   
+
+Shiny applications are extremely useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio, but he or she might not want to see the code, data and functions used for the calculation.  We will  embed our code and make explicit where our data came from, in case an end user does want to dig in or in case a colleague (including our future selves) want to reproduce/reuse our work. But we will also give consideration to the aesthetics and usability of our applications.
+
+This book is not a guide on building Shiny apps but we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to become an expert in Shiny, please start with shiny.rstudio.com or dedicated Shiny training.  
+
+That said, by the end of this book, we will have covered enough financial Shiny apps for the reader to be an intermediate app developer in the realm of portfolio management. Because our apps will emphasize reproducibility, you can take the foundation here and use it for more complex apps.
+
+Shiny applications are web-based so you will need to head to www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their source code. 

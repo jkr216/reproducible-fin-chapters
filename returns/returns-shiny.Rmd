@@ -1,5 +1,5 @@
 ---
-title: "Portfolio Growth"
+title: "Returns Distribution"
 runtime: shiny
 output:
   flexdashboard::flex_dashboard:
@@ -55,7 +55,6 @@ fluidRow(
   numericInput("w5", "Portf. %", 10, min = 1, max = 100))
 )
 
-
 fluidRow(
   column(7,
   dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd"))
@@ -70,11 +69,9 @@ fluidRow(
   )
 )
 
-
 actionButton("go", "Submit")
 
-
-portfolio_growth_xts <- eventReactive(input$go, {
+portfolio_returns_byhand <- eventReactive(input$go, {
   
   symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
   
@@ -82,60 +79,70 @@ portfolio_growth_xts <- eventReactive(input$go, {
              auto.assign = TRUE, warnings = FALSE) %>% 
   map(~Ad(get(.))) %>% 
   reduce(merge) %>%
-  `colnames<-`(symbols)
+    `colnames<-`(symbols)
 
   w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  asset_returns_long <- 
+      prices %>% 
+      to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+      tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+      gather(asset, returns, -date) %>% 
+      group_by(asset) %>%  
+      mutate(returns = (log(returns) - log(lag(returns))))
 
-  prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
-  asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
-
-  portfolio_growth_xts <- 
-    Return.portfolio(asset_returns_xts, 
-                   wealth.index = 1, 
-                   weights = w, 
-                   rebalance_on = input$rebalance) %>% 
-    `colnames<-`("growth")
-
-})
-
-
-```
-
-Portfolio Growth
-=====================================  
-
-Row {data-height=500}
------------------------------------------------------------------------
-
-### Highcharter vis
-
-```{r}
-renderHighchart({
-  highchart(type = "stock") %>%
-  hc_title(text = "Growth of a Dollar") %>%
-  hc_add_series(portfolio_growth_xts(), name = "Dollar Growth", color = "cornflowerblue") %>%
-  hc_navigator(enabled = FALSE) %>% 
-  hc_scrollbar(enabled = FALSE) 
+  portfolio_returns_byhand <- 
+    asset_returns_long %>% 
+    tq_portfolio(assets_col = asset, 
+               returns_col = returns, 
+               weights = w,
+               col_rename = "returns")
   
 })
+
 ```
 
+Returns
+=====================================  
 
-Row {data-height=500}
+
+Row {.tabset .tabset-fade}
 -------------------------------------
 
-### ggplot vis 
+
+### Scatterplot
 
 ```{r}
 renderPlot({
- 
-portfolio_growth_xts() %>% 
-    tk_tbl(preserve_index = TRUE, rename_index = "date") %>% 
-    ggplot(aes(x = date)) +
-    geom_line(aes(y = growth), color = "cornflowerblue") +
-    ylab("dollars") + 
-    ggtitle("Growth of Dollar over time")
+portfolio_returns_byhand() %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = returns), color = "cornflowerblue") +
+  ylab("percent monthly returns")
 })
 ```
+
+
+### Histogram
+
+```{r}
+renderPlot({
+  portfolio_returns_byhand() %>% 
+    ggplot(aes(x = returns)) +
+    geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue")
+})
+```
+
+### Density
+
+```{r}
+renderPlot({
+  portfolio_returns_byhand() %>% 
+    ggplot(aes(x = returns)) +
+    stat_density(geom = "line", size = 1, color = "cornflowerblue") 
+})
+```
+
+
+
 
 
