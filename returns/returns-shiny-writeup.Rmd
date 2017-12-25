@@ -9,30 +9,20 @@ output:
 knitr::opts_chunk$set(message=FALSE, warning=FALSE, eval = FALSE)
 ```
 
-Now we want to port our work to a Shiny application.  Before we do that, let's cover the basics of Shiny. 
-
-Shiny is an R package that wraps R code into an interactive web application.   
-
-Shiny applications are extremely useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio, but he or she might not want to see the code, data and functions used for the calculation.  We will  embed our code and make explicit where our data came from, in case an end user does want to dig in or in case a colleague (including our future selves) want to reproduce/reuse our work. But we will also give consideration to the aesthetics and usability of our applications.
-
-This book is not a guide on building Shiny apps but we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to become an expert in Shiny, please start with shiny.rstudio.com or dedicated Shiny training.  
-
-That said, by the end of this book, we will have covered enough financial Shiny apps for the reader to be an intermediate app developer in the realm of portfolio management. Because our apps will emphasize reproducibility, you can take the foundation here and use it for more complex apps.
-
-Shiny applications are web-based so you will need to head to www.reproduciblefinance.com to view and use them live. All of the applications built in this book are accessible there, along with their source code. It is not necessary to visit the applications. 
-
-In practice, we would not have already built the app and the first step would be to lay out the functionality of the app. This will help us when we are first building, and it will help others who might want to use our app as the basis for future work. 
-
-The purpose of the app is for an end user to be able to: 
+Now we want to port our work to a Shiny application so that an end user is able to: 
 
 1) choose tickers and portfolio weights
 2) choose a start date
 3) choose a rebalancing frequency
 4) visualize the portfolio returns on a scatterplot, histogram and density chart
 
-The application encompasses our work thus far as it requires importing daily price data, converting to monthly log returns, assigning portfolio weights, calculating portfolio returns, and visualizing with `ggplot`. This makes our work more flexible since the user can construct any 5-asset portfolio for which there's data in our data source. And, the number 5 is for illustrative purposes. Our app could easily support 50 assets (though consider the user experience there - will anyone manually enter 50 ticker symbols?). 
+The final app and full source code can be seen here: 
 
-Let's get to the code. We will again us Rmarkdown to build our Shiny applications by inserting into the yaml `runtime: shiny`. This will alert the server (or our laptop) that this is an interactive document. The yaml also gives us a space for the title. 
+www.reproduciblefinance.com/shiny/returns-distribution/
+
+The application encompasses much of our work thus far as it requires importing daily price data, converting to monthly log returns, assigning portfolio weights, calculating portfolio returns, and visualizing with `ggplot`. This makes our work more flexible since the user can construct any 5-asset portfolio for which there's data in our data source. And, the number 5 is for illustrative purposes. Our app could easily support 50 assets (though consider the user experience there - will anyone manually enter 50 ticker symbols?). 
+
+Let's get to the code. We will use Rmarkdown to build our Shiny applications by inserting into the yaml `runtime: shiny`. This will alert the server (or our laptop) that this is an interactive document. The yaml also gives us a space for the title. 
 
 ```{r, eval = FALSE}
 ---
@@ -44,7 +34,7 @@ output:
 ---
 ```
 
-We need to load the necessary packages, same as we did for our static scripts.
+As with other R scripts, we'll need to load the necessary packages. 
 
 ```{r, eval = FALSE}
 library(tidyverse)
@@ -53,8 +43,11 @@ library(tidyquant)
 library(timetk)
 ```
 
-Our first task is to build an input sidebar and enable users to choose five stocks and weights. We will use `textInput("stock1",...))` to create a space where the user can type a stock symbol and we will use `numericInput("w1",...)` to create a space where the user can enter a numeric weight.  Since we have 5 stocks and weights, we repeat this 5 times. Notice that the stock symbol field uses `textInput()` because the user needs to enter text and the weight field uses `numericInput()` because the user needs to enter a number.
+Alright, on the substance - the stuff an end user is going to see.
 
+Our first task is to build an input sidebar and enable users to choose five stocks and weights. We will use `textInput("stock1",...))` to create a space where the user can type a stock symbol and we will use `numericInput("w1",...)` to create a space where the user can enter a numeric weight.  We want those entry spaces to be on the same line or 'row' so we will nest them inside of a call to `fluidRow()` 
+
+Since we have 5 stocks and weights, we repeat this 5 times. Notice that the stock symbol field uses `textInput()` because the user needs to enter text and the weight field uses `numericInput()` because the user needs to enter a number.
   
 ```{r, eval = FALSE}
 
@@ -94,18 +87,35 @@ fluidRow(
 )
 ```
 
-Let's also have a row where the user can choose a start date with `dateInput("date",...)` and a rebalance frequency with `selectInput("rebalance", "rebal freq", c("Yearly" = "years", "Monthly" = "months", "Weekly" = "weeks"))`. 
+It's worth a second look at this code to make sure it's clear becuase we will be reusing it verbatim and making no apologies.  Let's dissect one of those fluid rows line-by-line. 
+
+`fluidRow()` creates the row. 
+`column(6...)` creates a column for our stock ticker input with a length of 6.
+`textInput("stock1", "Stock 1", "SPY"))` creates our first text input field. We called it `stock1` which means it will be referenced in downstream code as `input$stock1`.  We labeled it with "Stock 1", which is what the end user will see when viewing the app. Finally we set "SPY" as the default initial value. 
+
+
+We also want a row where the user can choose a start date with `dateInput("date", "Starting Date", "2010-01-01", format = "yyyy-mm-dd"))`.
 
 ```{r, eval = FALSE}
 fluidRow(
+  column(7,
+  dateInput("date", "Starting Date", "2010-01-01", format = "yyyy-mm-dd"))
+)
+```
+
+The `dateInput()`  is also quite important as we will use it in our future Shiny apps. 
+
+Finally, let's give the user the ability to rebalance the portfolio at different intervals. We will use `selectInput("rebalance", "rebal freq", c("Yearly" = "years", "Monthly" = "months", "Weekly" = "weeks"))` to create a drop down for the user.
+
+```{r, eval=FALSE}
+fluidRow(
   column(6,
-  dateInput("date", "Starting Date", "2010-01-01", format = "yyyy-mm-dd")),
-  column(5,
   selectInput("rebalance", "rebal freq",
               c("Yearly" = "years",
                 "Monthly" = "months",
                 "Weekly" = "weeks"))
-))
+  )
+)
 ```
 
 
@@ -116,11 +126,10 @@ Finally, we include a `submit` button for our end user. This button is what take
 actionButton("go", "Submit")
 ```
 
-This is a hugely important button because it enables the use of `eventReactives()` to control our computation. Let's have a look at that first `eventReaactive()` wherein we take the user-chosen stocks and grab their daily prices.
-
+This is a hugely important button because it enables the use of `eventReactive()` to control our computation. Let's have a look at that first `eventReaactive()` wherein we take the user-chosen stocks and grab their daily prices. The code should look very familiar from our previous work, except it depends on inputs from the user for ticker symbols, weights and starting date.
 
 ```{r, eval = FALSE}
-portfolio_byhand <- eventReactive(input$go, {
+portfolio_returns_byhand <- eventReactive(input$go, {
   
   symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
   
@@ -140,7 +149,7 @@ portfolio_byhand <- eventReactive(input$go, {
       group_by(asset) %>%  
       mutate(returns = (log(returns) - log(lag(returns))))
 
-  portfolio_byhand <- 
+  portfolio_returns_byhand <- 
     asset_returns_long %>% 
     tq_portfolio(assets_col = asset, 
                returns_col = returns, 
@@ -150,25 +159,32 @@ portfolio_byhand <- eventReactive(input$go, {
 })
 ```
 
+We now have an object called `portfolio_returns_byhand()` and we can pass that object to our downstream code chunks. In fact, our substantive work has been completed.  What's left is to display the distributions of portfolio returns, which we did in our previous work by passing the dataframe object to `ggplot`. 
 
-Our substantive work has been completed and we now want to display the distributions of portfolio return.  Outside of Shiny, this would be a simple passing of the dataframe object to `ggplot`. 
+Shiny works in a similar way but it also uses a custom function for building reactive charts called `renderPlot()`. By including `renderPlot()` in the code chunks, we are alerting the app that a reactive plot is being built, one that will change when the an upstream reactive or input changes. In this case, the plot will change when the user clicks 'submit' and fires off the `eventReactive()`.
 
-Shiny uses a custom function for building reactive ggplots charts called `renderPlot()`.
+After calling `renderPlot()`, we use `ggplot()` to create a scatter plot, a histogram and a density chart of monthly returns. These will be nested in different tabs so the user can toggle between them and choose which is most helpful. That might a bit hard to envision so I recommend a quick look at the app:
 
-Next, we use `ggplot()` to create a scatter plot, a histogram and a density chart of monthly returns. These will be nested in different tabs so the user can toggle between them and choose which is most helpful. 
+www.reproduciblefinance.com/shiny/returns-distribution/
 
-The flow for these is going to be the same: call the reactive function `renderPlot()`, `portfolio_byhand()`, call `ggplot()` with the right `aes()` argument and then choose the appropriate `geom`. We will add plenty of aesthetics to make things more engaging but those are taken directly from our previous visualization work.
+The flow for these 3 `ggplot` code chunks is going to be the same: call the reactive function `renderPlot()`, pass in`portfolio_returns_byhand()`, call `ggplot()` with an `aes(x = ...)` argument and then choose the appropriate `geom_`.  The specifics of the `geom_` and othe aesthetics are taken straight from our previous visualizations.
 
 ```{r, eval = FALSE}
 renderPlot({
-
+portfolio_returns_byhand() %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = returns), color = "cornflowerblue") +
+  ylab("percent monthly returns")
 })
 ```
 
 Here is the histogram code chunk.
 
 ```{r, eval = FALSE}
-
+renderPlot({
+  portfolio_returns_byhand() %>% 
+    ggplot(aes(x = returns)) +
+    geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue")
 })
 ```
 
@@ -176,13 +192,17 @@ And finally here is the density chart code chunk.
 
 ```{r, eval = FALSE}
 renderPlot({
-           
+  portfolio_returns_byhand() %>% 
+    ggplot(aes(x = returns)) +
+    stat_density(geom = "line", size = 1, color = "cornflowerblue") 
 })
-
 ```
 
+Again, the final app and full source code can be seen here: 
 
+www.reproduciblefinance.com/shiny/returns-distribution/
 
+This Shiny app is a good way to take all that grinding we did on portfolio returns and allow an end user to apply it to a custom portfolio. 
 
 
 

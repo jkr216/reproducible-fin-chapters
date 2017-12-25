@@ -6,7 +6,7 @@ output: pdf_document
 # Volatility
 
 ```{r setup, message = FALSE}
-webshot::install_phantomjs()
+#webshot::install_phantomjs()
 library(tidyquant)
 library(tidyverse)
 library(timetk)
@@ -31,6 +31,11 @@ Second, as always, we have an eye on making our work reproducible and reusable. 
 
 We will start with the textbook equation for the standard deviation of a multi-asset portfolio. 
 
+Here is the equation for sd: 
+
+$$Standard~Deviation=\sqrt{\sum_{t=1}^n (x_i-\overline{x})^2/n}$$
+
+
 - First, we assign the weights of each asset.
 - Then, we isolate and assign returns of each asset. 
 - Next, we plug those weights and returns into the equation for portfolio standard deviation, which involves the following:
@@ -40,15 +45,8 @@ We will start with the textbook equation for the standard deviation of a multi-a
 - This gives us the portfolio variance. 
 - Then take the square root to get the standard deviation. 
 
-Here is the equation for sd: 
-
-$$Standard~Deviation=\sqrt{\sum_{t=1}^n (x_i-\overline{x})^2/n}$$
 
 ```{r By Hand Std Dev}
-# This code chunk is verbose, repetitive, inefficient it is intentionally so, 
-# to emphasize how to breakdown volatility and grind through the equation. 
-
-# Let's assign each asset a weight from our weights vector above.
 
 w_1 <- w[1]
 w_2 <- w[2]
@@ -61,9 +59,7 @@ asset2 <- asset_returns_xts[,2]
 asset3 <- asset_returns_xts[,3]
 asset4 <- asset_returns_xts[,4]
 asset5 <- asset_returns_xts[,5]
-
-# I am going to label this 'sd_by_hand' to distinguish from when we later use matrix algebra 
-# and a built-in function for the same operation. 
+ 
 
 sd_by_hand <- 
   # Important, don't forget to take the square root! 
@@ -89,7 +85,7 @@ sd_by_hand_percent <- round(sd_by_hand * 100, 2)
 
 ```
 
-Writing that equation out was painful and very copy/pasty but at least we won't be forgetting it any time soon. Our result is a monthly portfolio returns standard deviation of `r sd_by_hand_percent`%.  
+Writing that equation out was painful but at least we won't be forgetting it any time soon. Our result is a monthly portfolio returns standard deviation of `r sd_by_hand_percent`%.  
 
 Now let's turn to the less verbose matrix algebra path and confirm that we get the same result. 
 
@@ -106,27 +102,27 @@ Have a look at the covariance matrix.
 
 AGG, the US bond ETF, has a negative or very low covariance with the other ETFs and it should make a nice volatility dampener.  Interestingly, the covariance between EEM and EFA is quite low as well.  Our painstakingly written-out equation above is a good reminder of how low covariances affect total portfolio standard deviation.
 
-Back to our calculation: now let's take the square root of the transpose of the weights vector times the covariance matrix times the weights vector. To perform matrix multiplcation, we use `%*%`.
+Back to our calculation, let's take the square root of the transpose of the weights vector times the covariance matrix times the weights vector. To perform matrix multiplcation, we use `%*%`.
 
 ```{r}
-# If we wrote out the matrix multiplication, we would get the original by-hand equation. 
 sd_matrix_algebra <- sqrt(t(w) %*% covariance_matrix %*% w)
 
-# I want to print out the percentage, so I'll multiply by 100.
 sd_matrix_algebra_percent <- round(sd_matrix_algebra * 100, 2)
+
+sd_by_hand_percent
+sd_matrix_algebra_percent
 ```
 
-The by-hand calculation is `r sd_by_hand_percent`% and the matrix algebra calculation is `r sd_matrix_algebra_percent`%. Thankfully, these return the same result so we don't have to sort through the by-hand equation again. 
+Have a look at our two standard deviation calculations Thankfully, these return the same result so we don't have to sort through the by-hand equation again. 
 
-And, finally, we can use the built-in `StdDev()` function from the `performanceAnalytics` package. It takes two arguments, returns and weights.
-
+And, finally, we can use the built-in `StdDev()` function from the `PerformanceAnalytics` package. It takes two arguments, returns and weights: `StdDev(asset_returns_xts, weights = w)`.
 
 ```{r}
-# Confirm portfolio volatility
-portfolio_sd <- StdDev(asset_returns_xts, weights = w)
 
-# I want to print out the percentage, so I'll multiply by 100.
-portfolio_sd_percent <- round(portfolio_sd * 100, 2)
+portfolio_sd_xts_builtin <- StdDev(asset_returns_xts, weights = w)
+
+
+portfolio_sd_xts_builtin_percent <- round(portfolio_sd_xts_builtin * 100, 2)
 ```
 
 We now have: 
@@ -134,86 +130,99 @@ We now have:
 ```{r}
 sd_by_hand_percent
 sd_matrix_algebra_percent
-portfolio_sd_percent
+portfolio_sd_xts_builtin_percent
 
 ```
 
 
-Now to the Tidy verse: 
+Now let's head to the tidyverse and explore the code flow. We will start with the portfolio returns object `portfolio_returns_tq_rebalanced_monthly` and we want to calculate the lifetime standard deviation. We use the `summarise()` function from `dplyr` and then the base function `sd()`.  We will also perform the calculation with our own equation `sqrt(sum((returns - mean(returns))^2)/(nrow(.)-1)))`. 
+
 ```{r}
-sd_tidy <-
+portfolio_sd_tidy_builtin_percent <-
   portfolio_returns_tq_rebalanced_monthly %>% 
   summarise(sd = sd(returns),
-            sd_byhand = 
-              sqrt(sum((returns - mean(returns))^2)/(nrow(.)-1))) %>% 
-  mutate(sd = round(sd, 4) * 100, sd_byhand = round(sd_byhand, 4) * 100)  %>%
+            sd_byhand = sqrt(sum((returns - mean(returns))^2)/(nrow(.)-1))) %>% 
+  mutate(sd = round(sd, 4) * 100,
+         sd_byhand = round(sd_byhand, 4) * 100)  %>%
   select(sd, sd_byhand)
-  
 
-sd_tidy
+portfolio_sd_tidy_builtin_percent  
 ```
  
+ Here are our standard deviation calculations thus far:
 
 - by-hand calculation = `r sd_by_hand_percent`%
 - matrix algebra calculation = `r sd_matrix_algebra_percent`%
-- xts built in function calculation = `r portfolio_sd_percent`%
-- tidy built in in function calculation = `r sd_tidy$sd`%
-- tidy by hand calculation = `r sd_tidy$sd_byhand`%
+- xts built in function calculation = `r portfolio_sd_xts_builtin_percentpercent`%
+- tidy built in in function calculation = `r portfolio_sd_tidy_builtin_percent$sd`%
+- tidy by hand calculation = `r portfolio_sd_tidy_builtin_percent$sd_byhand`%
 
 That was quite a lot of work to confirm that 5 calculations are equal to each other but there are a few benefits.
 
-First, while it was tedious, we should all be pretty comfortable with calculating portfolio standard deviations in various ways. That might never be useful to us, until the day that for some reason it is (e.g. if during an interview someone asks you to go to a whiteboard and write down the code for standard deviation or whatever equation/model - I think that's still a thing in interviews).
+First, while it was tedious, we should feel comfortable with calculating portfolio standard deviations in various ways and starting from different object types.
 
-More importantly, as our work gets more complicated and we build custom functions, we'll want to rely on the built-in `StdDev` function and the built-in tidy workflow and we now have confidence in those functions That's nice, but even more important is now that we have the template above, we can reuse it for other portfolios. 
+More importantly, as our work gets more complicated and we build custom functions, we'll want to rely on the built-in `StdDev` function and the built-in tidy workflow.  Our tedious work here, where we used different flows and functions by choice, will facilitate our future work when we need to solve harder coding challenges.  
 
-Also, this is more of a toy example than an actual template for use in industry.  If a team relies heavily on pre-built functions, even those built by the team itself, it's not a bad idea to have a grind-it-out sanity check Notebook like this one. It reminds team members what a pre-built function might be doing under-the-hood.
-
-Now let's turn to a little bit of portfolio theory (or, why we want to build a portfolio instead of putting all of our money into ETF, like IJS). We believe that by building a portfolio of assets whose covariances of retursn are lower than the variance of IJS returns (or, equivalently, lower than the covariance of SPY returns with themselves), we can construct a portfolio whose standard deviation is lower than the standard deviation of one stock If we believe that standard deviation and volatility are a good proxy for risk, then the portfolio would have a lower risk.
-
-To see if we succeeded, first, isolate the returns of IJS, then find the standard deviation of those returns.
-
-```{r}
-# First get the returns of the IJS etf isolated
-ijs_returns <- asset_returns_xts$IJS
-
-# Now calculated standard deviation
-ijs_sd <- sd(ijs_returns)
-
-# To confirm the variance of SPY's returns is equal to 
-# the covariance of SPY's returns with themselves, 
-# uncomment and run the next two lines of code.
-# ijs_var <- var(ijs_returns)
-# ijs_cov <- cov(ijs_returns, ijs_returns)
-
-# We could also have extracted this value from the covariance matrix
-# since the covariance of SPY with itself is equal to its variance. 
-ijs_sd_from_cov_matrix <- sqrt(covariance_matrix["IJS", "IJS"])
-
-# Again, I want percent so will multiply by 100.
-ijs_sd_percent <- round(ijs_sd * 100, 2)
-```
-
-The standard deviation of monthly SPY returns is `r ijs_sd_percent`% and that of the portfolio is `r portfolio_sd_percent`%.
-
-Fantastic, our portfolio has lower monthly volatility!
-
+Beyond helping our own work, it can help our colleagues to understand the more complex work if we can point back to this starter code flow on standard deviation.  
 
 # Visualize 
 
 ```{r}
-sd <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
-mean <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
-library(scales)
+
+portfolio_returns_tq_rebalanced_monthly %>%
+
+  ggplot(aes(x = date, y = returns)) + 
+  
+  geom_point(color = "cornflowerblue") +
+  scale_x_date(breaks = pretty_breaks(n = 8)) 
+```
+
+Hard to pick up much here though we can notice that the year 2017 had consistently positive monthly returns. Let's add some more indicators. It might be nice to have a different color for any monthly returns are, say, one standard deviation away from the mean. First, we will create an indicator for the mean return with `sd(portfolio_returns_tq_rebalanced_monthly$returns)` and one for the standard deviation with `mean(portfolio_returns_tq_rebalanced_monthly$returns)`. We will call the variables `mean_plot` and `sd_plot`.
+
+```{r}
+sd_plot <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
+mean_plot <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
+```
+
+We want to shade the scatter points according to some logic, in this case their distance from the standard deviation of returns.  Accordingly, we'll use `mutate()` to create three columns of returns...
+
+```{r}
 portfolio_returns_tq_rebalanced_monthly %>%
   mutate(hist_col_red = 
-           ifelse(returns < (mean - sd), 
+           ifelse(returns < (mean_plot - sd_plot), 
                   returns, NA),
          hist_col_green = 
-           ifelse(returns > (mean + sd), 
+           ifelse(returns > (mean_plot + sd_plot), 
                   returns, NA),
          hist_col_blue = 
-           ifelse(returns > (mean - sd) &
-                  returns < (mean + sd),
+           ifelse(returns > (mean_plot - sd_plot) &
+                  returns < (mean_plot + sd_plot),
+                  returns, NA)) %>% 
+  
+  ggplot(aes(x = date)) + 
+  
+  geom_point(aes(y = hist_col_red),
+               color = "red") +
+  
+  geom_point(aes(y = hist_col_green),
+               color = "green") +
+  
+  geom_point(aes(y = hist_col_blue),
+               color = "blue")
+```
+
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>%
+  mutate(hist_col_red = 
+           ifelse(returns < (mean_plot - sd_plot), 
+                  returns, NA),
+         hist_col_green = 
+           ifelse(returns > (mean_plot + sd_plot), 
+                  returns, NA),
+         hist_col_blue = 
+           ifelse(returns > (mean_plot - sd_plot) &
+                  returns < (mean_plot + sd_plot),
                   returns, NA)) %>% 
   
   ggplot(aes(x = date)) + 
@@ -227,19 +236,22 @@ portfolio_returns_tq_rebalanced_monthly %>%
   geom_point(aes(y = hist_col_blue),
                color = "blue") +
   
-  geom_hline(yintercept = (mean + sd), color = "purple", linetype = "dotted") +
-  geom_hline(yintercept = (mean-sd), color = "purple", linetype = "dotted") +
+  geom_hline(yintercept = (mean_plot + sd_plot), color = "purple", linetype = "dotted") +
+  geom_hline(yintercept = (mean_plot-sd_plot), color = "purple", linetype = "dotted") +
   scale_x_date(breaks = pretty_breaks(n = 8)) +
-
- ylab("percent monthly returns")
+ ylab("percent monthly returns") +
+  ggtitle("Monthly Returns Shaded by Distance from Mean")
 ```
 
-This is showing us returns over time and whether they fall below or above one standard deviation from the mean.  One observation to me is how many red or green circles we see after 2017. 0! That's zero monthly returns that are least one standard deviation from the mean. When we get to rolling volatility, we should see this reflected as a low rolling volatility through 2017. If we something different, we need to investigate.
+
+This is showing us returns over time and whether they fall below or above one standard deviation from the mean.  One thing that jumps out is how many red or green circles we see after 2017. 0! That's zero monthly returns that are least one standard deviation from the mean during calendar year 2017 (Is 2017 a year of very low volatility or did we construct an amazingly stable porftolio? Check out the VIX during 2017!). When we get to rolling volatility, we should see this reflected as a low rolling volatility through 2017. If we something different, we need to investigate.
 
 
 ## Rolling Volatility
 
-Why do we care about rolling standard deviations? We have already calculated the volatility for the entire life of the portfolio but we might miss a 3-month or 6-month period where the volatility spiked or plummeted or did both. And the longer our sample size, the more likely we are to miss something important. If we had 10 or 20 years of data and we calculated the standard deviation for the entire sample, we could, or most certainly would, fail to notice a period in which volatility was very high, and hence we would fail to ponder the probability that it could occur again. 
+We have already calculated the volatility for the entire life of the portfolio but that's not quite adequate to understand the volatility for this collection of assets. 
+ 
+We might miss a 3-month or 6-month period where the volatility spiked or plummeted or did both. And the longer our portfolio life, the more likely we are to miss something important. If we had 10 or 20 years of data and we calculated the standard deviation for the entire historyy, we could, or most certainly would, fail to notice a period in which volatility was very high, and hence we would fail to ponder the probability that it could occur again. 
 
 Imagine a portfolio which had a standard deviation of returns for each 6-month period of 3% and it never changed. Now imagine a portfolio whose volatility fluctuated every few 6-month periods from 0% to 6% . We might find a 3% standard deviation of monthly returns over a 10-year sample for both of these, but those two portfolios are not exhibiting the same volatility. The rolling volatility of each would show us the differences and then we could hypothesize about the past causes and future probabilities for those differences. We might also want to think about dynamically rebalancing our portfolio to better manage volatility if we are seeing large spikes in the rolling windows.
 
@@ -248,11 +260,16 @@ Our least difficult task is calculating the rolling standard deviation of SPY re
 ```{r}
 window <- 6
 
-spy_rolling_sd <- round(na.omit(rollapply(asset_returns_xts$SPY, window, 
+# doesn't work and that important as we'll see
+port_rolling_sd <- round(na.omit(rollapply(asset_returns_xts, window, 
+                           function(x) StdDev(x, weights = w))), 4) * 100
+# works
+port_rolling_sd <- round(na.omit(rollapply(portfolio_returns_xts_rebalanced_monthly, window, 
                            function(x) StdDev(x))), 4) * 100
 ```
 
-We now have an `xts` object called `spy_rolling_sd` that contains the 6-month rolling standard deviation of returns of SPY.  Keep in mind that the chosen window is important and can affect the results quite a bit. Soon we'll wrap this work to a Shiny app where changing the window and visualizing the results will be easier. 
+We now have an `xts` object called `port_rolling_sd` that contains the 6-month rolling standard deviation of returns of SPY.  Keep in mind that the chosen window is important and can affect the results quite a bit. Soon we'll wrap this work to a Shiny app where changing the window and visualizing the results will be easier. 
+
 
 Next, we calculate the rolling volatility of our weighted portfolio. The `rollapply` function doesn't play nicely with the `weights` argument that we need to supply to `StdDev()`. We will craft our own version of roll apply to make this portfolio calculation, which we will use in conjunction with the `map_df()` function from `purrr`. 
 
@@ -272,7 +289,7 @@ returns_xts <- portfolio_component_monthly_returns_df %>%
   tk_xts(date_var  = date)
 ```
 
-Why did we take that detour? Because we will use `map_df()`, `mutate()` and `select()` when we apply our custom function with the `%>%` operator and that will require a `tibble`/`data.frame`. 
+Why did we take that detour? Because we will use `map_df()`, `mutate()` and `select()` when we apply our custom function with the `%>%` operator and that will require a `tibble`. 
 
 Before we step through the code of the custom function, let's write out the goal and logic.
 
@@ -413,39 +430,9 @@ It's remarkable how rolling volatility has absolutely plunged since early-to-mid
 Now let's wrap all of that work into a Shiny app that allows a user to construct his/her own 5-asset portfolio, choose a benchmark and a time period and visualize the rolling volatilities over time. 
 
 The app is availalbe online here: 
-http://www.reproduciblefinance.com/shiny/portfolio-volatility-shiny-app/
 
-First we need to create an input `sidebar` where the user can choose assets, weights, a date and a benchmark for comparison.
+www.reproduciblefinance.com/shiny/portfolio-volatility-shiny-app/
 
-```{r, eval = FALSE}
-# This creates the sidebar input for the first stock and its weight.
-# We'll need to copy paste this fluidRow for however many assets are in our portfolio. 
-fluidRow(
-  column(6,
-  textInput("stock1", "Stock 1", "SPY")),
-  column(4,
-  numericInput("w1", "Portf. %", 40, min = 1, max = 100))
-)  
-
-# Let the user choose a benchmark to compare to the portfolio volatility.
-# We'll default to the Russell 2000 small cap index
-textInput("benchmark", "Benchmark for Comparison", "^RUT")
-
-
-fluidRow(
-  column(6,
-  dateInput("start_date", "Start Date", value = "2013-01-01")),
-  column(3,
-  numericInput("window", "Window", 6, min = 3, max = 20, step = 1))
-)
-
-# This action button is important for user experience and server resources.
-actionButton("go", "Submit")
-```
-
-That last line creates an `actionButton` which is important for the end user. We have more than 10 user inputs in that sidebar and without that `actionButton`, the app will start firing and reloading every time a usre changes any of the inputs. Annoying for the user and taxing on the server! We will make sure the reactives wait for the user to click that button by using `eventReactive`. 
-
-For example, in the lines below, the app will wait to calculate the rolling portfolio volatility because the  value `portfolio_rolling_vol` is an `eventReactive` that won't fire until `input$go` is true. 
 
 
 ```{r, eval = FALSE}
@@ -522,6 +509,7 @@ renderHighchart({
     hc_scrollbar(enabled = FALSE)
 })
 ```
+
 This app allows the user to build a custom portfolio and compare to a benchmark of his/her choosing. Have fun with it and try to find some assets whose volatility has been increasing since the election in November.
 
 ## Component Contribution 
@@ -769,19 +757,3 @@ Now we can visualize with `highcharter` by adding the rolling conbtribution of e
 
 For some reason, EEM rolling volatility spiked in June. Did something roil emerging markets in the preceding months? And IJS vol plunged, which seems unusual for a small-cap fund. AGG and EFA have had stable volatilities. 
 
-There are plenty of future applications if we ever get bored over a weekend: 
--subset by spikes, perhaps whenever x asset went above this threshold for risk contribution.
--label any cross overs
--try to explain when a certain goes above the thresh
--calculate portfolio that puts to parity at time x
--compare to the Vix
-- compare to oil prices
-- compare to a random portfolio
-- compare to SP500 or a sector
-
-
-## Shiny App
-
-## Minimum Variance Portfolio
-
-## Shiny App

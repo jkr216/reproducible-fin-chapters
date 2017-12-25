@@ -9,14 +9,21 @@ output:
 knitr::opts_chunk$set(message=FALSE, warning=FALSE, eval = FALSE)
 ```
 
-Now we want to port our work to a Shiny application so that an end user is able to: 
+Now we want to port our Dollar Growth work to a Shiny application so that an end user is able to: 
 
 1) choose tickers and portfolio weights
 2) choose a start date
 3) choose a rebalancing frequency
 4) chart the growth of a dollar in the portfolio since the chosen start date
 
-The input sidebar is identical to that of our app on returns distribtution We let the use choose 5 ticker symbols, 5 weights, a start date and rebalance period. The user then clicks 'submit' to fire up the reactives.  
+The final app can be seen here with full source code:
+
+www.reproduciblefinance.com/shiny/portfolio-growth/
+
+The input sidebar is identical to that of our app on returns distribtution We let the user choose 5 ticker symbols, 5 weights, a start date and rebalance period. The user then clicks 'submit' to fire up the reactives. Since it's identical, we're not going to review it here. 
+
+We will, though, review the difference substantive flow that is used to get portfolio growth. We use an `eventReactive()`, pass in tickers, weights, start date and frequency, but instead of calculating portfolio returns, we calculate portfolio growth. It's not a copy paste from our first app, but it's a similar structure. Since we use `highcharter` in this app, we go with the `xts` world and use 
+`Return.portfolio(asset_returns_xts, wealth.index = 1,...)` - this is the same method we used in our previous growth calculation.
 
 ```{r, eval = FALSE}
 portfolio_growth_xts <- eventReactive(input$go, {
@@ -45,8 +52,7 @@ portfolio_growth_xts <- eventReactive(input$go, {
 })
 ```
 
-
-Our substantive work has been completed and we now want to display the chart of the portfolio growth over time.  Outside of Shiny, this would be a simple passing of the xts object to `highcharter`. 
+At this point, portfolio growth is calculated and stored as `portfolio_growth_xts()` and our substantive work has been completed. Now we want to display the chart of the portfolio growth over time.  Outside of Shiny, this would be a simple passing of the xts object to `highcharter`. 
 
 As with `ggplot`, Shiny uses a custom function for building reactive highcharter charts called `renderHighchart()`. Once we invoke that `renderHighchart()`, our code looks very similar to our previous visualization work as we use `hc_add_series(portfolio_growth_xts(), name = "Dollar Growth", color = "cornflowerblue")` to add our portfolio growth xts object to a chart.
 
@@ -58,11 +64,10 @@ renderHighchart({
   hc_add_series(portfolio_growth_xts(), name = "Dollar Growth", color = "cornflowerblue") %>%
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE) 
-  
 })
 ```
 
-Next, we use `ggplot()` to create the same visual as above but in the tidy world. The code flow is quite similar to how we would normally create a line chart, except we first need to convert our `xts` object to a tibble with `tk_tbl(preserve_index = TRUE, rename_index = "date")`.  Then we make our usual call to `ggplot(aes(x = date))` and add a geom with `geom_line(aes(y = growth), color = "cornflowerblue")`.
+Next, we use `ggplot()` to create the same visual as above but in the tidy world. The code flow is quite similar to how we would normally create a line chart, except we first need to convert our `xts` object to a tibble with `tk_tbl(preserve_index = TRUE, rename_index = "date")`.  Then we make our call to `ggplot(aes(x = date))` and add a geom with `geom_line(aes(y = growth), color = "cornflowerblue")`.
 
 Note that the `renderPlot()` function is playing the same role as `renderHighchart()` above - it is alerting the Shiny app that a reactive plot is forthcoming after user inputs, instead of a static plot that is unchanging.
 

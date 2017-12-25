@@ -149,6 +149,6 @@ portfolio_returns_tq_rebalanced_yearly <-
 ```
 
 ```{r}
-save(list = ls(.GlobalEnv), file = "book-data.Rdat")
+save(list = ls(.GlobalEnv), file = "book-data.Rdata")
 ```
 
