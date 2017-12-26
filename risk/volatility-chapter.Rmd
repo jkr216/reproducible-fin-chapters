@@ -1,6 +1,8 @@
 ---
 title: "Vol-Chapter"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 # Volatility
@@ -153,7 +155,7 @@ portfolio_sd_tidy_builtin_percent
 
 - by-hand calculation = `r sd_by_hand_percent`%
 - matrix algebra calculation = `r sd_matrix_algebra_percent`%
-- xts built in function calculation = `r portfolio_sd_xts_builtin_percentpercent`%
+- xts built in function calculation = `r portfolio_sd_xts_builtin_percent`%
 - tidy built in in function calculation = `r portfolio_sd_tidy_builtin_percent$sd`%
 - tidy by hand calculation = `r portfolio_sd_tidy_builtin_percent$sd_byhand`%
 
@@ -168,7 +170,7 @@ Beyond helping our own work, it can help our colleagues to understand the more c
 # Visualize 
 
 ```{r}
-
+library(scales)
 portfolio_returns_tq_rebalanced_monthly %>%
 
   ggplot(aes(x = date, y = returns)) + 
@@ -255,174 +257,124 @@ We might miss a 3-month or 6-month period where the volatility spiked or plummet
 
 Imagine a portfolio which had a standard deviation of returns for each 6-month period of 3% and it never changed. Now imagine a portfolio whose volatility fluctuated every few 6-month periods from 0% to 6% . We might find a 3% standard deviation of monthly returns over a 10-year sample for both of these, but those two portfolios are not exhibiting the same volatility. The rolling volatility of each would show us the differences and then we could hypothesize about the past causes and future probabilities for those differences. We might also want to think about dynamically rebalancing our portfolio to better manage volatility if we are seeing large spikes in the rolling windows.
 
-Our least difficult task is calculating the rolling standard deviation of SPY returns. We  use `rollapply` for this and just need to choose a number of months for the rolling window. 
+Our least difficult task is calculating the rolling standard deviation of portfolio returns. 
+
+In the `xts` world, we use a direct call to `rollapply` for this and need to choose a number of months for the rolling window. 
 
 ```{r}
 window <- 6
 
-# doesn't work and that important as we'll see
-port_rolling_sd <- round(na.omit(rollapply(asset_returns_xts, window, 
-                           function(x) StdDev(x, weights = w))), 4) * 100
-# works
-port_rolling_sd <- round(na.omit(rollapply(portfolio_returns_xts_rebalanced_monthly, window, 
-                           function(x) StdDev(x))), 4) * 100
+port_rolling_sd_xts <- rollapply(portfolio_returns_xts_rebalanced_monthly,
+                                 FUN = sd, 
+                                 width = window) %>% na.omit()
+
 ```
-
-We now have an `xts` object called `port_rolling_sd` that contains the 6-month rolling standard deviation of returns of SPY.  Keep in mind that the chosen window is important and can affect the results quite a bit. Soon we'll wrap this work to a Shiny app where changing the window and visualizing the results will be easier. 
-
-
-Next, we calculate the rolling volatility of our weighted portfolio. The `rollapply` function doesn't play nicely with the `weights` argument that we need to supply to `StdDev()`. We will craft our own version of roll apply to make this portfolio calculation, which we will use in conjunction with the `map_df()` function from `purrr`. 
-
-Before we do that, a slight detour from our substance. Below are two piped workflows to quickly convert from `xts` to `dataframe` and back to `xts`. These rely heavily on the `as_tibble()` and `as_xts()` functions from the  [tidyquant](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf).
-
-```{r, message = FALSE}
-# toggle from an xts object to a tibble
-portfolio_component_monthly_returns_df <- 
-  asset_returns_xts %>% 
-  tk_tbl(preserve_index = TRUE) %>% 
-  mutate(date = ymd(index)) %>% 
-  select(-index) %>% 
-  select(date, everything())
-
-# toggle from a tibble back to xts.
-returns_xts <- portfolio_component_monthly_returns_df %>% 
-  tk_xts(date_var  = date)
-```
-
-Why did we take that detour? Because we will use `map_df()`, `mutate()` and `select()` when we apply our custom function with the `%>%` operator and that will require a `tibble`. 
-
-Before we step through the code of the custom function, let's write out the goal and logic.
-
-Our goal is to create a function that takes (1) a `data.frame` of asset returns and calculates the rolling standard deviation based on a (2) starting date index and a (3) window, for a portfolio (4) with specified weights of each asset.  We will need to supply four arguments to the function, accordingly.
-
-Here's the logic I used to construct that function (feel free to eviscerate this logic and replace it with something better).  
-
-1. Assign a start date and end date based on the window argument. If we set window = 6, we'll be calculating 6-month rolling standard deviations. 
-2. Use `filter()` to subset the original `data.frame` down to one window. I label the subsetted data frame as `interval_to_use`. In our example, that interval is a 6-month window of our original data frame. 
-3. Now we want to pass that `interval_to_use` object to `StdDev()` but it's not an `xts` object. We need to convert it and label it `returns_xts`. 
-4. Before we call `StdDev()`, we need weights. Create a weights object called `w` and give the value from the argument we supplied to the function.
-5. Pass the `returns_xts` and `w` to `StdDev()`.
-6. We now have an object called `results_as_xts`. What is this? It's the standard deviation of returns of the first 6-month window of our weighted portfolio. 
-7. Convert it back to a `tibble` and return.
-8. We now have the standard deviation of returns for the 6-month period that started on the first date, because we default to `start = 1`. If we wanted to get the standard deviation for a 6-month period that started on the second date, we could set `start = 2`, etc.
-
-```{r Rolling Portfolio Vol Function}
-rolling_portfolio_sd <- function(returns_df, start = 1, window = 6, weights){
- 
-  start_date <- returns_df$date[start]
-  
-  end_date <-  returns_df$date[c(start + window)]
-  
-  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
-  
-  returns_xts <- interval_to_use %>% tk_xts(date_var = date) 
-  
-  w <- weights
-  
-  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "single")
-  
-  results_to_tibble <- tk_tbl(t(results_as_xts[,1])) %>% 
-    mutate(date = ymd(end_date)) %>% 
-    select(date, everything()) 
-  
-}
-```
-
-We're only halfway there, though, because we need to apply that function starting at the first date in our `portfolio_component_monthly_returns_df` object, and keep applying it to successive date indexes until the date that is 6 months before the final date. Why end there? Because there is no rolling 6-month standard deviation that starts only 1, 2, 3, 4 or 5 months ago! 
-
-We will invoke `map_df()` to apply our function to date 1, then save the result to a data frame, then apply our function to date 2, and save to that same `data.frame`, and so on until we tell it stop at the at index that is 6 before the last date index. 
-
-```{r Use Function}
-window <- 6
-roll_portfolio_result <-
-  map_df(1:(nrow(portfolio_component_monthly_returns_df) - window), 
-         rolling_portfolio_sd, 
-         returns_df = portfolio_component_monthly_returns_df, 
-         window = window, weights = w) %>%
-  mutate(date = ymd(date)) %>% 
-  select(date, everything()) %>%
-  tk_xts(date_var = date) %>% 
-  `colnames<-`("Rolling Port SD") %>% 
-  round(., 4) *100
-
-head(roll_portfolio_result)
-```
-
-Have a look at the rolling standard deviations. Why is the first date August of 2013? Do any of the results stand our as unusual, when compared to the SPY results? It's hard to make the comparison until we chart them, and that's what we do in the next section
-
-## Visualizing Rolling Volatility
-Recall that we have 2 objects and we want to compare their respective rolling volatilities: 
-
-- `spy_rolling_sd` (an `xts` object of rolling SPY standard deviations)
-- `roll_portfolio_result` (an `xts` object of rolling portfolio standard deviations)
- 
-The charts will highlight any unusual occurrences or volatility spikes/dips that we might want to investigate and  it's the fun payoff after all the equations and functions we ground out in the previous posts. 
-
-We have 2 objects in our Global Environment
-- `spy_rolling_sd` - an `xts` object of rolling SPY standard deviations
-- `roll_portfolio_result` - an `xts` object of rolling portfolio standard deviations
-
-Because both of those are `xts` objects, we can pass them straight to `highcharter` with the `hc_add_series()` function, and we will set a name and color with the `name` and `color` arguments. Nothing too complicated here - we did the hard work the last section. 
+The `tidyquant` packages has a nice way to apply the rolling function to data frames. We use `tq_mutate` and supply `mutate_fun = rollapply` as our mutation function argument, then `FUN = sd` as the nested function beneath it. 
 
 ```{r}
-highchart(type = "stock") %>%
-  hc_title(text = "SPY v. Portfolio Rolling Volatility") %>%
-  hc_add_series(spy_rolling_sd, name = "SPY Volatility", color = "blue") %>%
-  hc_add_series(roll_portfolio_result, name = "Port Volatility", color = "green") %>%
-  hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
-  hc_navigator(enabled = FALSE) %>% 
-  hc_scrollbar(enabled = FALSE)
+port_rolling_sd_tidy <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  tq_mutate(mutate_fun = rollapply,
+            width = window,
+            FUN = sd,
+            col_rename = ("rolling_sd")) %>%
+  select(date, rolling_sd) %>% 
+  na.omit()
 ```
 
-Interesting to note that from late April 2016 to late October 2016, SPY's rolling standard deviation dipped below that of the diversified portfolio. The portfolio volatility was plunging at the same time, but SPY's was falling faster. What happened over the 6 preceding months to explain this?
+Take a quick peak to confirm consistent results. 
+
+```{r}
+head(port_rolling_sd_xts)
+head(port_rolling_sd_tidy)
+```
+
+
+
+We now have an `xts` object called `port_rolling_sd_xts` and a tibble object called `port_rolling_sd_tidy`.  They contain the 6-month rolling standard deviations of portfolio.  
+
+At the outset of this section, we opined that rolling volatilty might some insight that is obscured by the total volatility. Visualizing the rolling standard deviation should help to illuminate this. 
+
+Let's start with the `xts` object and `highcharter`.
+
+First, we will convert to our data to rounded percentages for ease of charting. 
+
+```{r}
+port_rolling_sd_xts_hc <- round(port_rolling_sd_xts, 4) * 100
+```
+
+
+```{r}
+highchart(type = "stock") %>% 
+    hc_title(text = "Volatility Contribution") %>%
+    hc_add_series(port_rolling_sd_xts_hc) %>% 
+    hc_add_theme(hc_theme_flat()) %>%
+    hc_yAxis(
+      labels = list(format = "{value}%"), 
+             opposite = FALSE) %>%
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+```
+
+
+Let's do the same with our data frame and ggplot. 
+
+```{r}
+port_rolling_sd_tidy %>%
+  ggplot(aes(x = date)) + 
+  geom_line(aes(y = rolling_sd), color = "cornflowerblue") + 
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_date(breaks = pretty_breaks(n = 8))
+```
+
+Note that we didn't do any work to change our decimal to percentage format. When we called 
+`scale_y_continuous(labels = scales::percent)` it did that work for us by adding the % sign and multiplying by 100. 
+
+Do these visualizations add to our understanding of this portfolio? Well, we can see a spike in rolling volatility in early 2016 followed by a consistently falling vol through to mid 2017. 
+
+
+
 
 Maybe we should add a flag to highlight this event. We can also add flags for the maximum SPY volatility, maximum and minimum portfolio rolling volatility and might as well include a line for the mean rolling volatility of SPY to practice adding horizontal lines. 
 
 We will use two methods for adding flags. First, we'll hard code the date for the flag as "2016-04-29", which is the date when rolling SPY volatility dipped below the portfolio. 
 
 Second, we'll set a flag with the date     
-`as.Date(index(roll_portfolio_result[which.max(roll_portfolio_result)]),format = "%Y-%m-%d")` which looks like a convoluted mess but is adding a date for whenever the rolling portfolio standard deviation hit its maximum. 
+`as.Date(index(port_rolling_sd_xts_hc[which.max(port_rolling_sd_xts_hc)]),format = "%Y-%m-%d")` which looks like a convoluted mess but is adding a date for whenever the rolling portfolio standard deviation hit its maximum. 
 
-This is a bit more 'dynamic' because we can change our assets but keep this code the same and it will find the date with the maximum rolling standard deviation. Our first flag is not dynamic in the sense that it is specific to the comparison between SPY and this exact portfolio. 
 
 ```{r}
 
-port_max_date <- as.Date(index(roll_portfolio_result[which.max(roll_portfolio_result)]),
+port_max_date <- as.Date(index(port_rolling_sd_xts_hc[which.max(port_rolling_sd_xts_hc)]),
                          format = "%Y-%m-%d")
-port_min_date <- as.Date(index(roll_portfolio_result[which.min(roll_portfolio_result)]),
-                         format = "%Y-%m-%d")
-spy_max_date <- as.Date(index(spy_rolling_sd[which.max(spy_rolling_sd)]),
+port_min_date <- as.Date(index(port_rolling_sd_xts_hc[which.min(port_rolling_sd_xts_hc)]),
                          format = "%Y-%m-%d")
 
 
 highchart(type = "stock") %>%
-  hc_title(text = "SPY v. Portfolio Rolling Volatility") %>%
-  hc_add_series(spy_rolling_sd, name = "SPY Volatility", color = "blue", id = "SPY") %>%
-  hc_add_series(roll_portfolio_result, name = "Portf Volatility", color = "green", id = "Port") %>%
-  hc_add_series_flags(spy_max_date,
-                      title = c("SPY Max "), 
-                      text = c("SPY max rolling volatility."),
-                      id = "SPY") %>%
+  hc_title(text = "Portfolio Rolling Volatility") %>%
+  hc_yAxis(title = list(text = "Volatility"),
+           labels = list(format = "{value}%"),
+           opposite = FALSE) %>%
+  hc_add_series(port_rolling_sd_xts_hc, 
+                name = "Portf Volatility", 
+                color = "cornflowerblue", 
+                id = "Port") %>%
    hc_add_series_flags(port_max_date,
-                      title = c("Portf Max"), 
-                      text = c("Portfolio maximum rolling volatility."),
+                      title = c("Max Rolling Vol"), 
+                      text = c("maximum rolling volatility."),
                       id = "Port") %>%
   hc_add_series_flags(port_min_date,
-                      title = c("Portf Min"), 
-                      text = c("Portfolio min rolling volatility."),
-                      id = "Port") %>%
-  hc_yAxis(title = list(text = "Mean SPY rolling Vol"),
-           showFirstLabel = FALSE,
-           showLastLabel = FALSE,
-           plotLines = list(
-             list(value = mean(spy_rolling_sd), color = "#2b908f", width = 2)))  %>% 
+                      title = c("Min Rolling Vol"), 
+                      text = c("min rolling volatility."),
+                      id = "Port") %>% 
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE)
 
 
 ```
 
-It's remarkable how rolling volatility has absolutely plunged since early-to-mid 2016. Since August of 2016, both the portfolio and SPY rolling standard deviations have been well below the SPY mean. 
+It's remarkable how rolling volatility has absolutely plunged since early-to-mid 2016. 
 
 
 ## Shiny App
@@ -433,84 +385,8 @@ The app is availalbe online here:
 
 www.reproduciblefinance.com/shiny/portfolio-volatility-shiny-app/
 
+## NEED TOTALLY NEW WRITE UP BASED ON new functions above.
 
-
-```{r, eval = FALSE}
-portfolio_rolling_vol <- eventReactive(input$go, {
-  
-  returns_df <- 
-    componentReturns_df(input$stock1, input$stock2, input$stock3, input$stock4, 
-                        input$stock5, input$start_date) %>% 
-    mutate(date = ymd(date))
-  
-  weights <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
-  
-  window <- input$window
-  
-  roll_portfolio_result <-
-    map_df(1:(nrow(returns_df) - window), rolling_portfolio_sd, 
-         returns_df = returns_df, window = window, weights = weights) %>%
-    mutate(date = ymd(date)) %>% 
-    select(date, everything()) %>%
-    tk_xts(date_var = date) %>% 
-    `colnames<-`("Rolling Port SD")
-   # an xts comes out of this
-})
-```
-
-The user is going to choose a benchmark for comparison and we need another `eventReactive` to take that input and calculate rolling volatility for the benchmark.  The asset is passed via `input$benchmark` from the sidebar.
-
-```{r, eval = FALSE}
-benchmark_rolling_vol <- eventReactive(input$go, {
-  
-  benchmark_prices <- 
-  getSymbols(input$benchmark, src = 'yahoo', from = input$start_date, 
-               auto.assign = TRUE, warnings = FALSE) 
-  
-  benchmark_close <- Cl(get(benchmark_prices))
-    
-  benchmark_prices_monthly <- to.monthly(benchmark_close, indexAt = "first", OHLC = FALSE)
-  
-  benchmark_returns <- na.omit(Return.calculate(benchmark_prices_monthly, method = "log"))
-  
-  benchmark_rolling_sd <- rollapply(benchmark_returns,
-                             input$window,
-                             function(x) StdDev(x))
-  
-  benchmark_rolling_sd <- round(benchmark_rolling_sd, 4) * 100
-  
-  
-})
-```
-
-Finally, when we visualize it's nice to include the chosen benchmark in the title. Thankfully, that is a simple `eventReactive`.
-
-```{r, eval = FALSE}
-
-benchmark <- eventReactive(input$go, {input$benchmark})
-```
-
-We have now calculated three reactive objects: `portfolio_rolling_vol()`, `benchmark_rolling_vol()`, and `benchmark()`.  We pass them to `highcharter` and tweak aesthetics on the y-axis. 
-
-```{r, eval = FALSE}
-
-renderHighchart({
-  highchart(type = "stock") %>% 
-    hc_title(text = paste("Portfolio Volatility vs", benchmark(), "Volatility", sep = " ")) %>%
-    hc_yAxis(title = list(text = "Vol Percent"),
-           labels = list(format = "{value}%"),
-           opposite = FALSE) %>% 
-    hc_add_series(portfolio_rolling_vol(), name = "Portfolio Vol", color = "blue") %>%
-    hc_add_series(benchmark_rolling_vol(), 
-                  name = paste(benchmark(), "Vol", sep = " "),
-                  color = "green") %>%
-    hc_add_theme(hc_theme_flat()) %>%
-    hc_navigator(enabled = FALSE) %>% 
-    hc_scrollbar(enabled = FALSE)
-})
-```
-
-This app allows the user to build a custom portfolio and compare to a benchmark of his/her choosing. Have fun with it and try to find some assets whose volatility has been increasing since the election in November.
 
 ## Component Contribution 
 
@@ -757,3 +633,4 @@ Now we can visualize with `highcharter` by adding the rolling conbtribution of e
 
 For some reason, EEM rolling volatility spiked in June. Did something roil emerging markets in the preceding months? And IJS vol plunged, which seems unusual for a small-cap fund. AGG and EFA have had stable volatilities. 
 
+## To shiny with component contribution
