@@ -125,10 +125,9 @@ MAR <- mar()
 sortino_byhand <- 
   portfolio_returns_tidy %>% 
   slice(-1) %>% 
-  #mutate(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.))) %>% 
-  # Add two new columns to help with ggplot.
-  mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA)) %>%
-  mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))
+  mutate(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)),
+         returns_below_MAR = ifelse(returns < MAR, returns, NA),
+         returns_above_MAR = ifelse(returns > MAR, returns, NA))
 
 })
 

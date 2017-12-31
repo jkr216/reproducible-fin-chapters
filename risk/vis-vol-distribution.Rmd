@@ -11,7 +11,7 @@ library(tibbletime)
 library(highcharter)
 
 knitr::opts_chunk$set(message=FALSE, warning=FALSE)
-
+library(scales)
 load("~/reproducible-fin-chapters/book-data.Rdata")
 ```
 
@@ -21,7 +21,7 @@ We visualize returns with ggplot, and then we visualize skew and kurtosis with g
 ```{r}
 sd <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
 mean <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
-library(scales)
+
 portfolio_returns_tq_rebalanced_monthly %>%
   mutate(scat_col_red = 
            ifelse(returns < (mean - sd), 

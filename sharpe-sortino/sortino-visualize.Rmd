@@ -5,18 +5,16 @@ output:
     df_print: paged
 ---
 
+We are going to implement a code flow very similar to what we did for the Sharpe Ratio but will use the MAR instead of the risk-free rate for our cut points. This might seem repetitive from our previous work but one person's repetitiveness is another person's efficient reusability. 
 
 When we originally calculated Sortino by-hand in the tidy world, we used `summarise` to create one new cell for our end result. The code was `summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))`.  
 
-Today, we will make two additions to assist in our data visualization. We will add a column for returns that follow below MAR with `mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA))` and add a column for returns above MAR with `mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))`. This is not necessary for calculating the Sortino, but we will see how it makes our ggplotting a bit easier and it illustrates a benefit of doing things by-hand with `dplyr`: if we want to extract or create certain data tranformations, we can add it to the piped code flow.
+We  make two additions to assist in our data visualization. We will add a column for returns that follow below MAR with `mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA))` and add a column for returns above MAR with `mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))`. There is no difference between this and our Sharpe Ratio work except `MAR` has replaced `rfr`. 
 
 ```{r}
-
-# Tibble object
 sortino_byhand <- 
   portfolio_returns_tidy %>%
   mutate(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.))) %>% 
-  # Add two new columns to help with ggplot.
   mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA)) %>%
   mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))
 
@@ -26,11 +24,9 @@ We now have two objects in our global environment, `sortino_xts` and `sortino_by
 
 Let's work with `sortino_byhand` and start with a scatterplot of returns using `ggplot`. 
 
-The goal is to quickly grasp how many of our returns are above the MAR and how many are below the MAR. When we calculated the Sortino above, we created new columns for `returns_above_MAR` and `returns_below_MAR` columns. It makes this visualization a straightforward construct.
+We will create green points for returns above MAR with `geom_point(aes(y = returns_above_MAR), colour = "green")` and red points for returns below MAR with `geom_point(aes(y = returns_below_MAR), colour = "red") `. We add a blue vertical line at November of 2016 with `geom_vline(xintercept = as.numeric(as.Date("2016-11-30")), color = "blue")`.  
 
-We will create green points for returns above MAR with `geom_point(aes(y = returns_above_MAR), colour = "green")` and red points for returns below MAR with `geom_point(aes(y = returns_below_MAR), colour = "red") `.  
-
-I'm always curious how portfolios have performed since the election so we'll add a blue vertical line at November of 2016.  We will also include a horizontal purple dotted line at the MAR.
+We will also include a horizontal purple dotted line at the MAR with `geom_hline(yintercept = MAR, color = "purple", linetype = "dotted")`.
 
 ```{r, warning = FALSE, message = FALSE}
 sortino_byhand %>% 

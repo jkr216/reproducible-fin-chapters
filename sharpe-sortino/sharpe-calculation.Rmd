@@ -11,9 +11,7 @@ output:
 knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 ```
 
-Today, we begin a project to build a Shiny application that allows a user to build a portfolio and calculate/visualize its Sharpe Ratio. 
-
-The final app is viewable [here]()) but we'll spend the next 3 posts contructing that.
+In this chapter, 
 
 Briefly, the Sharpe Ratio is the mean of the excess portfolio returns above the risk-free rate, divided by the standard deviation of the excess monthly returns above the risk-free rate.  This is the formulation of the Sharpe Ratio as of 1994; if we wished to use the original formulation from 1966 the denominator would be the standard deviation of portfolio monthly returns. Learn more [here](http://web.stanford.edu/~wfsharpe/art/sr/sr.htm).
 
@@ -24,25 +22,16 @@ The Sharpe Ratio eqation is as follows:
 
 $$Sharpe~Ratio={(\overline{R_{p}-R_{f}})}/\sigma_{excess}$$
 
-The numerator is the mean excess return above the risk free rate and the numerator is the standard deviation of those excess returns.  In other words, it's a ratio of return to risk and so a higher Sharpe Ratio indicates a 'better' portfolio.  .
-
+The numerator is the mean excess return above the risk free rate and the numerator is the standard deviation of those excess returns.  In other words, it's a ratio of return to risk and so a higher Sharpe Ratio indicates a 'better' portfolio.
 
 
 As for our project, we will proceed in 3 steps:
 
-    1. Build a portfolio and calculate the Sortino Ratio using 3 methods (today's post)
-    2. Visualize the Sortino Ratio using ggplot and highcharter (next week)
+    1. Build a portfolio and calculate the Sharpe Ratio using 3 methods (today's post)
+    2. Visualize the Sharpe Ratio using ggplot and highcharter (next week)
     3. Wrap to an interactive Shiny App (in two weeks)
 
-When working with the Sharpe Ratio, we have two critical choices: how to construct the portfolio using assets and weights, and which risk free to use.  Our Shiny application at project's end will allow a user to make these choices and see how the Sortino Ratio changes.  For today, we will go with the following portfolio and risk free rate: 
-
-Assets and Weights
-
-    + SPY (S&P500 fund) weighted 25%
-    + EFA (a non-US equities fund) weighted 25%
-    + IJS (a small-cap value fund) weighted 20%
-    + EEM (an emerging-mkts fund) weighted 20%
-    + AGG (a bond fund) weighted 10%
+When working with the Sharpe Ratio, we have two critical choices: how to construct the portfolio using assets and weights, and which risk free to use.  We've already chosen a portfolio so that leaves a risk free rate.
     
 Risk Free Rate
     
@@ -51,77 +40,166 @@ Risk Free Rate
 Let's load our packages: 
 
 ```{r setup}
-# first install the packages if they are not already installed in your environment.
-# install.packages("tidyverse")
-# install.packages("tidyquant")
-# install.packages("timetk")
 
 library(tidyverse)
 library(tidyquant)
 library(timetk)
 
-load()
 ```
 
-
+Before we do anything else, let's assign the risk free rate to a variable called `rfr`.
 
 ```{r}
-
 rfr <- .00008
-
 ```
 
 
-On to the Sortino analysis.  Calculating the Sortino Ratio in the `xts` world is almost depressingly convenient. We call `SortinoRatio(portfolio_returns_xts, MAR = MAR)`, passing our portfolio returns and MAR tot he built-in function from `PerformanceAnalytics`.
+On to the Sharpe analysis.  Calculating the Sharpe Ratio in the `xts` world is almost depressingly convenient. We call `SharpeRatio(portfolio_returns_xts, MAR = MAR)`, passing our portfolio returns and MAR tot he built-in function from `PerformanceAnalytics`.
 
 ```{r}
-sortino_xts <- 
-  SortinoRatio(portfolio_returns_xts, MAR = MAR) %>% 
+sharpe_xts <- 
+  SharpeRatio(portfolio_returns_xts_rebalanced_monthly, Rf = rfr) %>% 
   `colnames<-`("ratio")
 ```
 
 From a substantive perspective, we could stop here and start visualizing with `highcharter`. 
 
-Instead, we will run the calculation by-hand, implementing the equation for the Sortino Ratio via pipes and `dplyr`.  It's not a verbose piped workflow. In short, we call `summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))`.  
+Instead, we will run the calculation by-hand, implementing the equation for the Sharpe Ratio via pipes and `dplyr`.  It's not a verbose piped workflow. In short, we call `summarise(ratio = mean(returns - rfr)/sd(returns - rfr))`.  
 
-Note the use of `slice(-1)` to remove the first row. I want to delete that first 0.00 for January of 2005 to be consistent with the `xts` operations, but that is an important choice and one that could be questioned. Perhaps we should instead re-wrangle our `xts` object to make it consistent? Either way, we want to be explicit about the choice so that others can reproduce this work later.
 
 ```{r}
-sortino_byhand <- 
-  portfolio_returns_tidy %>% 
-  slice(-1) %>%
-  summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))
+sharpe_byhand <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  summarise(ratio = mean(returns - rfr)/sd(returns - rfr))
 
-
-sortino_byhand
+sharpe_xts[1]
+sharpe_byhand
 
 ```
 
 
-Now on to `tidyquant`, which allows us to apply the `SortinoRatio` function from `PerformanceAnalytics` to a `tibble`. As long as we are passing it the same data as we passed originally with the `xts` object, we expect the same result.
+Now on to `tidyquant`, which allows us to apply the `SharpeRatio` function from `PerformanceAnalytics` to a `tibble`. 
 
 
 ```{r}
-sortino_tidy <- 
-  portfolio_returns_tidy %>%
-  slice(-1) %>% 
-  tq_performance(Ra = returns, 
-                 performance_fun = SortinoRatio, 
-                 MAR = MAR,
-                 method = "full") %>% 
+sharpe_tidy <- 
+  portfolio_returns_tq_rebalanced_monthly %>%
+  tq_performance(Ra = returns,
+                 performance_fun = SharpeRatio,
+                 Rf = rfr) %>%
+  select(2) %>% 
   `colnames<-`("ratio")
+
 ```
 
-Let's compare our 3 Sortino objects. 
+Let's compare our 3 Sharpe objects. 
 
 ```{r}
-sortino_xts[1]
-sortino_byhand$ratio
-sortino_tidy$ratio
+sharpe_xts[1]
+sharpe_byhand$ratio
+sharpe_tidy$ratio
 ```
 
-We have consistent results from `xts`, `tidyquant` and our by-hand piped calculation.  It might feel like a lot of work to get the same result three times but it forced us to look under the hood of the built-in functions and it might serve us well in the future should we have data or a project that fits better with one of the three methods.  
+We have consistent results from `xts`, `tidyquant` and our by-hand piped calculation.  It might feel like a lot of work to get the same result three times but, again, it forced us to look under the hood of the built-in functions and it might serve us well in the future should we have data or a project that fits better with one of the three methods.  
 
-That's all for today. Next time we will visualize the Sortino Ratio and its data slicing implications using `ggplot2` and `highcharter`. Thanks for reading.
+When we originally calculated Sharpe by-hand in the tidy world, we used `summarise` to create one new cell for our end result. The code was `summarise(ratio = mean(returns - rfr)/sd(returns - rfr)) `.  
+
+Now, we will make two additions to assist in our data visualization. We will add a column for returns that follow below rfr with `mutate(returns_below_rfr = ifelse(returns < rfr, returns, NA))` and add a column for returns above rfr with `mutate(returns_above_rfr = ifelse(returns > rfr, returns, NA))`. This is not necessary for calculating the Sortino, but we will see how it makes our ggplotting a bit easier and it illustrates a benefit of doing things by-hand with `dplyr`: if we want to extract or create certain data tranformations, we can add it to the piped code flow.
+
+```{r}
+
+sharpe_byhand <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(ratio = mean(returns - rfr)/sd(returns - rfr)) %>%  
+  mutate(returns_below_rfr = ifelse(returns < rfr, returns, NA)) %>%
+  mutate(returns_above_rfr = ifelse(returns > rfr, returns, NA))
+
+
+```
+
+We now have two objects in our global environment, `sharpe_xts` and `sharpe_byhand`. 
+
+Let's work with `sharpe_byhand` and start with a scatterplot of returns using `ggplot`. 
+
+The goal is to quickly grasp how many of our returns are above the rfr and how many are below the rfr. When we calculated the sharpe above, we created new columns for `returns_above_rfr` and `returns_below_rfr` columns. It makes this visualization a straightforward construct.
+
+We will create green points for returns above rfr with `geom_point(aes(y = returns_above_rfr), colour = "green")` and red points for returns below rfr with `geom_point(aes(y = returns_below_rfr), colour = "red") `.  
+
+I'm always curious how portfolios have performed since the election so we'll add a blue vertical line at November of 2016.  We will also include a horizontal purple dotted line at the rfr.
+
+```{r, warning = FALSE, message = FALSE}
+sharpe_byhand %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = returns_below_rfr), colour = "red") +
+  geom_point(aes(y = returns_above_rfr), colour = "green") + 
+  geom_vline(xintercept = as.numeric(as.Date("2016-11-30")), color = "blue") +
+  geom_hline(yintercept = rfr, color = "purple", linetype = "dotted") +
+  annotate(geom="text", x=as.Date("2016-11-30"), 
+           y = -.15, label = "Election", fontface = "plain", 
+           angle = 90, alpha = .5, vjust =  1.5) +
+  ylab("percent monthly returns") +
+  scale_y_continuous(breaks = pretty_breaks(n=20))
+```
+
+Next we will build a histogram of the distribution of returns with `geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue")`. We will again add a line for the MAR.
+
+```{r}
+sharpe_byhand %>% 
+  ggplot(aes(x = returns)) +
+  geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue") +
+  geom_vline(xintercept = rfr, color = "green") +
+  annotate(geom = "text", x = rfr,
+    y = 22, label = "rfr", fontface = "plain", angle = 90, alpha = .5, vjust =  1)
+
+```
+
+I notice a slight negative skew and a mode that is above the risk free rate. That's good because if our mode were below the risk free rate we wouldn't last long in this business.
+
+We have not, however, visualized the actual Sharpe Ratio yet.  We will do so now.  
+
+The ratio itself is one number: `r round(sharpe_xts[1], 3)`. Similar to the standard deviation or volatility of returns, that doesn't allow much by way of dynamic visualization and it might obscure important periods in our data. 
+
+First, we need to calculate the rolling 6-month Sharpe Ratio with `rollapply(portfolio_returns_xts_rebalanced_monthly, 6, function(x) SharpeRatio(x, Rf = rfr, FUN = "StdDev"))`. Note that we need to pass in the argument `FUN = "StdDev"`. Try running the code without that argument check out the error. 
+
+```{r}
+sharpe_roll_6_xts <- 
+  rollapply(portfolio_returns_xts_rebalanced_monthly, 6, 
+            function(x) SharpeRatio(x, Rf = rfr, FUN = "StdDev")) 
+
+sharpe_roll_6_xts_comp <- apply.rolling(portfolio_returns_xts_rebalanced_monthly, 6,
+                                   fun =  "SharpeRatio", Rf = rfr) 
+
+
+```
+
+
+Let's chart with `highcharter` and investigate any unusual occurrences.
+
+```{r}
+highchart(type = "stock") %>%
+  hc_title(text = "Rolling Sharpe") %>%
+  hc_add_series(sharpe_roll_6_xts, name = "sharpe", color = "blue") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+A huge spike in 2017 as our genius is validated! Recall that the rolling contribution to volatility of EEM spiked in 2017 as well. There seems to be something afoot during those first six-months.
+
+Let's see how the rolling 12-month compares and whether it smooths out these spikes.
+
+```{r}
+sharpe_roll_12_xts <- rollapply(portfolio_returns_xts_rebalanced_monthly, 12, 
+                           function(x) SharpeRatio(x, Rf = rfr, FUN = "StdDev"))
+
+highchart(type = "stock") %>%
+  hc_title(text = "Rolling sharpe") %>%
+  hc_add_series(sharpe_roll_12_xts, name = "sharpe 24", color = "green") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+There's still a spike in 2017 but of a smaller magnitude.
+
+We are not going to port this work over to `ggplot` 
 
 

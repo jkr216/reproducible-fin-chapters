@@ -88,8 +88,6 @@ rolling_sharpe <- eventReactive(input$go, {
   rfr <- rfr()
   window <- input$window
 
-# XTS world
-
 prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
 asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
 
@@ -119,14 +117,13 @@ portfolio_returns_tidy <-
                returns_col = returns, 
                weights = w,
                col_rename = "returns")
-
 rfr <- rfr()
-
 sharpe_byhand <- 
   portfolio_returns_tidy %>% 
   slice(-1) %>%
-  mutate(returns_below_rfr = ifelse(returns < rfr, returns, NA)) %>%
-  mutate(returns_above_rfr = ifelse(returns > rfr, returns, NA))
+  mutate(ratio = mean(returns - rfr)/sd(returns - rfr),
+         returns_below_rfr = ifelse(returns < rfr, returns, NA),
+         returns_above_rfr = ifelse(returns > rfr, returns, NA))
 
 })
 
@@ -162,16 +159,19 @@ Row {data-height=200}
 ```{r}
 valueBoxOutput("approvalBox1")
 output$approvalBox1<-renderValueBox({
-  valueBox(value = 6, icon = "fa-line-chart", color = "primary")
+  
+  sharpe_byhand <- sharpe_byhand() %>% summarise(ratio = round(mean(ratio), 4))
+  
+  ratio <- sharpe_byhand$ratio  
+  
+  valueBox(value = sharpe_byhand, icon = "fa-line-chart", color = "primary")
 })
 ```
 
 ### Sharpe Ratio of S&P500 in same time period
 
 ```{r}
-
-valueBoxOutput("approvalBox2")
-output$approvalBox2<-renderValueBox({
+renderValueBox({
   valueBox(value = 5, icon = "fa-line-chart", color = "primary")
 })
 ```
@@ -216,32 +216,7 @@ renderPlot({
 })
 ```
 
-### Density
 
-```{r}
-renderPlot({
-  rfr <- rfr()
-  sharpe_byhand <- sharpe_byhand()
-  
-  sharpe_density_plot <- sharpe_byhand %>% 
-    ggplot(aes(x = returns)) +
-    stat_density(geom = "line", size = 1, color = "cornflowerblue") 
-  
-  sharpe_shaded_area_data <- ggplot_build(sharpe_density_plot)$data[[1]] %>% 
-    filter(x < rfr)
-
-  sharpe_density_plot + 
-  geom_area(data = sharpe_shaded_area_data, aes(x = x, y = y), fill="pink", alpha = 0.5) +
-  geom_segment(data = sharpe_shaded_area_data, aes(x = rfr, y = 0, xend = rfr, yend = y), 
-               color = "red", linetype = "dotted") +
-  annotate(geom = "text", x = rfr, y = 5, label = paste("rfr =", rfr, sep = ""), 
-           fontface = "plain", angle = 90, alpha = .8, vjust =  -1) +
-  annotate(geom = "text", x = (rfr - .02), y = .1, label = "Downside", 
-           fontface = "plain", alpha = .8, vjust =  -1)
-           
-})
-
-```
 
 
 
