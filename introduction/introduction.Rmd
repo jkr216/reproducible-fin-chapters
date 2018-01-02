@@ -32,6 +32,10 @@ What is covered in this book?
 - redundancy
 - shiny
 
+A word on how things are weighted. You might notice a heavy emphasis on step 1, what probably seems the simplest step. Afterall, why waste our valuable time thinking about importing data, then wrangling it. Why not zip through that as fast possible and get to our risk management or portfolio construction as quickly as possible! 
+1) If our team selves can't get the data into the right format, or see it in its raw state and how we go wrangled into our usable data, they can't evaluate our work or reproduce it. 
+2) that time investement will pay off and make us more efficeient in the future in a few ways. first, it will ensure we have 'grokked' our data. love it or hate it, if you painstakingly document and make explicit your steps fromd data import to wrangle to transformation, you will know your data better than anyone else on the planet. And that raises the probability that your team will unearth creative insights or algorithms. Two, when you do unearth those algorithms, coding them up will be much faster if you know your data structures backwards and forwards. If that stuff is second nature, your team can spend more time on the alpha generating stuff. 
+
 What is not covered in this book? 
 
 The goal of this book is to demonstrate several, reproducible methods for calculating and visualizing the substance. We will not delve into the math that underlies the substance or delve deep into the portfolio theory. That stuff is important and highly recommended (and fascinating!). For readers who want to explore those concepts, I recommend Eric Zivot's "Financial Analytics with R" (see if you can port his code over to one of our methods). 

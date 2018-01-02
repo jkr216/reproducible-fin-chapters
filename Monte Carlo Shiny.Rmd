@@ -1,0 +1,208 @@
+---
+title: "Monte Carlo Dashboard"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+---
+
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(highcharter)
+library(tidyquant)
+library(timetk)
+library(scales)
+```
+
+Sidebar {.sidebar}
+=====================================
+  
+```{r}
+
+fluidRow(
+  column(6,
+  textInput("stock1", "Stock 1", "SPY")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(6,
+  textInput("stock2", "Stock 2", "EFA")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock3", "Stock 3", "IJS")),
+  column(5,
+  numericInput("w3", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock4", "Stock 4", "EEM")),
+  column(5,
+  numericInput("w4", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock5", "Stock 5", "AGG")),
+  column(5,
+  numericInput("w5", "Portf. %", 10, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd"))
+)
+
+fluidRow(
+  column(7,
+  numericInput("sim_months", "Months to Sim", 120, min = 6, max = 240, step = 6))
+)
+
+actionButton("go", "Submit")
+```
+
+
+```{r}
+prices <- eventReactive(input$go, {
+  
+  symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
+  
+  getSymbols(symbols, src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+})
+
+
+portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
+  
+  prices <- prices()
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  asset_returns_long <- 
+      prices %>% 
+      to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+      tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+      gather(asset, returns, -date) %>% 
+      group_by(asset) %>%  
+      mutate(returns = (log(returns) - log(lag(returns))))
+
+  portfolio_returns_tq_rebalanced_monthly <- 
+  asset_returns_long %>%
+  tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
+})
+
+mean_port_return <- eventReactive(input$go, {
+  
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
+  
+  mean(portfolio_returns_tq_rebalanced_monthly$returns)
+})
+
+stddev_port_return <- eventReactive(input$go, {
+  
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
+  
+  sd(portfolio_returns_tq_rebalanced_monthly$returns)
+})
+
+simulation_accum_1 <- function(init_value, N, mean, stdev) {
+    tibble(c(init_value, 1 + rnorm(N, mean, stdev))) %>% 
+    `colnames<-`("returns") %>%
+    mutate(growth = accumulate(returns, function(x, y) x * y)) %>% 
+    select(growth)
+}
+
+
+monte_carlo_sim_51 <- eventReactive(input$go, { 
+  
+  sims <- 51
+  
+  starts <- 
+    rep(1, sims) %>%
+    set_names(paste("sim", 1:sims, sep = ""))
+  
+  map_dfc(starts, simulation_accum_1,
+          N = input$sim_months, mean = mean_port_return(), 
+          stdev = stddev_port_return()) %>% 
+  mutate(month = seq(1:nrow(.))) %>% 
+  select(month, everything()) %>% 
+  `colnames<-`(c("month", names(starts)))
+  
+})
+
+```
+
+Simulated Growth
+=====================================  
+
+Row {data-height=600, .tabset}
+-----------------------------------------------------------------------
+
+### Sim Vis
+
+```{r}
+renderPlot(
+  monte_carlo_sim_51() %>% 
+    gather(sim, growth, -month) %>% 
+    group_by(sim) %>% 
+    ggplot(aes(x = month, y = growth, color = sim)) + 
+    geom_line() +
+    theme(legend.position="none")
+)
+```
+
+
+### Sim table
+
+```{r}
+renderTable(
+  monte_carlo_sim_51()
+)
+
+```
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+
+
+### Min, Max, Median Sim
+
+```{r}
+renderPlot({
+ 
+sim_summary <- 
+  monte_carlo_sim_51() %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>% 
+  summarise(final = last(growth)) %>% 
+  summarise(
+            max = max(final), 
+            min = min(final),
+            median = median(final))
+
+monte_carlo_sim_51() %>% 
+  gather(sim, growth, -month) %>% 
+  group_by(sim) %>%
+  filter(
+      any(growth == sim_summary$max) || 
+      any(growth == sim_summary$median) ||
+      any(growth == sim_summary$min)) %>% 
+  ggplot(aes(x = month, y = growth)) + 
+  geom_line(aes(color = sim))
+
+})
+```

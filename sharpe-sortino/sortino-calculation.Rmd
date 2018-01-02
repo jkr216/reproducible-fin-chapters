@@ -38,7 +38,6 @@ Minimum Acceptable Rate
     + MAR = .008 or .8%
     + Note we are holding this portfolio to a higher standard than being above 0%.
 
-
 Next we choose our asset weights and assign them to the variable `w`. We will also assign the MAR of .008 to the variable `MAR`.
 
 ```{r}

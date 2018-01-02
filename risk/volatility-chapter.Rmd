@@ -1,15 +1,13 @@
 ---
 title: "Vol-Chapter"
 output:
-  pdf_document: default
-  html_document:
-    df_print: paged
+     pdf_document:
+         latex_engine: xelatex
 ---
 
 # Volatility
 
 ```{r setup, message = FALSE}
-#webshot::install_phantomjs()
 library(tidyquant)
 library(tidyverse)
 library(timetk)
@@ -23,11 +21,11 @@ load("~/reproducible-fin-chapters/book-data.Rdata")
 
 Welcome to our chapter focused on portfolio volatility, variance and standard deviation. I realize that it's a lot more fun to ~~fantasize about~~ analyze stock returns which is why television shows and websites constantly update the daily market returns and give them snazzy green and red colors. But good ol'volatility is quite important in its own right, especially to finance geeks, aspiring finance geeks and institutional investors. If you are, might become, or might ever work with/for any of those, this chapter should at least serve as a jumping off point.
 
-A quick word of warning that this chapter begins at the beginning with portfolio standard deviation and builds up to more complex work. R users with experience in the world of volatility may wish to skip a few sections or head straight to the Shiny sections.  That said, I would humbly offer a couple of benefits to the R code that awaits us. 
+A quick word of warning that this chapter begins at the very beginning with portfolio standard deviation and builds up to more complex work. R users with experience in the world of volatility may wish to skip a few sections or head straight to the Shiny sections.  That said, I would humbly offer a couple of benefits to the R code that awaits us. 
 
 First, volatility is important, possibly more important than returns. I don't think any investment professional looks back on hours spent pondering volatility as a waste of time. 
 
-Second, as always, we have an eye on making our work reproducible and reusable. We'll make it exceedingly clear how we derive our final data visualizations on portfolio volatility. It's a good template for other visualization derivations, even if standard deviation is old hat for you.
+Second, we will unsurprisingly emphasize reproducibility and making our code readable/reusable. It's a good template for other statistical work, even if standard deviation is old hat for you.
 
 
 ## Introduction to Volatility
@@ -632,13 +630,13 @@ Now we turn to our most involved task yet, to calculate the rolling volatility c
 
 This task had the potential to be quite straightforward with the following. 
 
-```{r}
+```{r, eval = FALSE}
                       
 rolling_contribution <- rollapply(asset_returns_xts, window, 
                            function(x) StdDev(x, weights = w))
 ```
 
-That code throws an error that the weights vector doesn't play nicely with `rollapply()`. There might be a hack around this problem but let's not look for the hack and take this as a good chance to tackle a problem where the built-in functions accomplish 90% of our task but we need to construct code for the final 10%.  Our previous work manipulating objects from data frames to `xts` and slicing/dicing will serve us well here. 
+That code throws an error to the effect that the weights vector doesn't play nicely with `rollapply()`. There might be a hack around this problem but let's not look for the hack and take this as a good chance to tackle a problem where the built-in functions accomplish 90% of our task but we need to construct code for the final 10%.  Our previous work manipulating objects from data frames to `xts` and slicing/dicing will serve us well here. 
 
 Our goal is to create a function that takes (1) a `data.frame` of asset returns and calculates the rolling contributions of each asset to volatility, based on a (2) starting date index and a (3) window, for a portfolio (4) with specified weights of each asset.  We will need to supply four arguments to the function, accordingly.
 

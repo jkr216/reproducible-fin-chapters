@@ -1,8 +1,8 @@
 ---
 title: "Monte Carlo Chapter"
 output:
-  html_notebook: default
-  pdf_document: default
+     pdf_document:
+         latex_engine: xelatex
 ---
 
 On to simulating the growth of a dollar in our portfolio 
@@ -10,14 +10,13 @@ On to simulating the growth of a dollar in our portfolio
 We will revisit these steps in more detail below but briefly we will: 
 
 1) Assume our returns are normally distributed
-2) With mean and standard deviation as previously calculated
-3) Choose a number of months to simulate and the number of times to run the simulation
-4) Write functions to run those simulations in several equivalent ways
-5) Visualize our results
+2) Assume that normal distribution is described by the mean and standard deviation previously calculated
+3) Write several equivalent functions to run simulations based on the mean and standard deviation
+4) Choose a number of months to simulate and the number of times to run the simulation
+5) Write a code flow to run our functions for the chosen months and simulations
+6) Visualize our results
 
-Of those 5 steps, number is the only one that requires new substantive work. The other 4 steps build on what we have already done (step 4 does, too, but it's a different application). 
-
-The first step is a crucial one and it bears a bit more discussion.  We make an assumption that the distribution of portfolio returns are normal.  We have done plenty of visualizing of those returns and examined the skewness and kurtosis to see to what extent the returns are not normal. Is the assumption correct? Are the returns normally distributed? For our purposes, we will say yes - but the empirical question of whether we are right or wrong is not the focuso of this book. Rather, the more important point for making our work reproducible is to explicitly declare this assumption, explain where it came from (our work on portfolio returns) and discuss any weaknesses (maybe high skewness or kurtosis which we have already discussed).  The goal is for a team member or end consumer to understand the assumption be able to reproduce any evidence for or against it, and decide independently if the assumption is valid enough to support our simulation.  
+The first step is a crucial one and it bears a bit more discussion.  We make an assumption that the distribution of portfolio returns are normal.  We have done plenty of visualizing of those returns and examined the skewness and kurtosis to see to what extent the returns are not normal. Is the assumption correct? Are the returns normally distributed? For our purposes, we will say yes - but the empirical question of whether we are right or wrong is not the focus of this book. Rather, the more important point for making our work reproducible is to explicitly declare this assumption, explain where it came from (our work on portfolio returns) and discuss any weaknesses (maybe high skewness or kurtosis which we have already discussed).  The goal is for a team member or end consumer to understand the assumption, be able to reproduce any evidence for or against it, and decide independently if the assumption is valid enough to support our simulation.  
 
 
 
@@ -35,16 +34,24 @@ sp500, by sector, or by etf, run the simulations, then joy plot density
 ```{r}
 library(tidyquant)
 library(tidyverse)
+library(highcharter)
+library(scales)
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 load("~/reproducible-fin-chapters/book-data.Rdata")
 ```
 
-Let's start by using our mean and standard deviation calcuation to create simulated monthly returns.  We will use the `rnorm()` function to sample from a distribution with mean equal to `mean(portfolio_returns_tq_rebalanced_monthly$returns)` and standard deviation equal to `sd(portfolio_returns_tq_rebalanced_monthly$returns)`.  How many times should we draw from this distribution? We are using monthly returns and 120 months is 10 years - that feels like a good amount of time to simulate.  
+First, we need to define our mean and standard deviation.
 
 ```{r}
-mean <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
-stddev <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
+mean_port_return <- mean(portfolio_returns_tq_rebalanced_monthly$returns)
+stddev_port_return <- sd(portfolio_returns_tq_rebalanced_monthly$returns)
+```
 
-simulated_monthly_returns <- rnorm(120, mean, stddev)
+
+Next we use the `rnorm()` function to sample from a distribution with mean equal to `mean_port_return` and standard deviation equal to `stddev_port_return`.  How many times should we draw from this distribution, meaning how many monthly returns should we simulate? We are using monthly returns and 120 months is 10 years - that feels like a good amount of time to simulate.
+
+```{r}
+simulated_monthly_returns <- rnorm(120, mean_port_return, stddev_port_return)
 ```
 
 Have a quick look at the simulated monthly returns. 
@@ -54,14 +61,14 @@ head(simulated_monthly_returns)
 tail(simulated_monthly_returns)
 ```
 
-We want to simulate the growth of a dollar so the first value should be 1. Also, very similar to how we calculated the growth of a dollar in our portfolio, we wan to add a 1 to each of our monthly returns. This will allow us to run cumulative functions.
+Hard to get an intution about whether these results make sense. Let's calculate the growth of a dollar using that `simulated_monthly_returns` object.  This is very similar to how we calculated the growth of a dollar in our actual portfolio in Chapter 1 Section 4. We add a 1 to each of our monthly returns and then run cumulative functions.
 
 ```{r}
-simulated_tibble <- 
+simulated_returns_add_1 <- 
   tibble(c(1, 1 + simulated_monthly_returns)) %>% 
   `colnames<-`("returns")
 
-head(simulated_tibble)
+head(simulated_returns_add_1)
 ```
 
 That object is now ready to be converted into the cumulative growth of a dollar. We can use either `accumulate()` from `purrr` or `cumprod()`. Let's use both of them and confirm consistent, reasonable results. 
@@ -69,23 +76,32 @@ That object is now ready to be converted into the cumulative growth of a dollar.
 ```{r}
 
 simulated_growth <- 
-simulated_tibble %>%
+simulated_returns_add_1 %>%
     mutate(growth1 = accumulate(returns, function(x, y) x * y),
            growth2 = accumulate(returns, `*`),
            growth3 = cumprod(returns)) %>% 
     select(-returns)
 
-cagr <- ((simulated_growth$growth1[nrow(simulated_growth)] ^ (1/10)) -1) * 100
-
+tail(simulated_growth)
 ```
 
 The results are consistent. 
 
-Are they reasonable? This simulation indicates our portfolio grew in size to `r simulated_growth$growth1[nrow(simulated_growth)]` over the simulated future 10 years, implying an annual compounded growth of `r cagr`%. That seems reasonable but we've run just one simulation. Let's run more, lots more simulations!
+Are they reasonable? Let's check out the compound annual growth rate that is implied by this simulation.
 
-First, we will build simulation functions that incorporate the `accumulate()` and `cumprod()` workflows above. We have confirmed they give consistent results so it's a matter of taste as to which one is chosen in the end. 
+```{r}
+cagr <- ((simulated_growth$growth1[nrow(simulated_growth)] ^ (1/10)) -1) * 100
+cagr
+```
 
-Each function needs 4 arguments: N for the number of months to simulate, init_value for the starting value (we used $1 above) and the mean/standard deviation pair to create draws from a normal distribution. We choose N and init_value, and derive the mean/sd pair from our portfolio monthly returns object. 
+
+This simulation indicates our portfolio grew in size to `r simulated_growth$growth1[nrow(simulated_growth)]` over the simulated future 10 years, implying an annual compounded growth of `r cagr`%. That seems reasonable given our actual returns have all been taken from a raging bull market.
+
+If we feel good about this first simulation, we now want to run a lot more of them to get a sense for how they are distributed.
+
+First, we will build simulation functions that incorporate the `accumulate()` and `cumprod()` workflows above. We have confirmed they give consistent results so it's a matter of aesthetics as to which one is chosen in the end. Perhaps you feel that one is more flexible or extensible or fits better with your team's code flows.
+
+Each function needs 4 arguments: N for the number of months to simulate (we chose 120 above), init_value for the starting value (we used $1 above) and the mean/standard deviation pair to create draws from a normal distribution. We choose N and init_value, and derive the mean/sd pair from our portfolio monthly returns object. 
 
 Here is our first growth simulation function using `accumulate()`
 
@@ -121,6 +137,7 @@ simulation_cumprod <- function(init_value, N, mean, stdev) {
   select(growth)
 }
 ```
+
 Here is a function that uses all three methods, in case we want a fast way to re-confirm consistency. 
 
 ```{r}
@@ -135,17 +152,21 @@ simulation_confirm_all <- function(init_value, N, mean, stdev) {
 }
 ```
 
-Let's test that `confirm_all()` function with an init_value of 1, N of 10, and our mean/sd pair
+Let's test that `confirm_all()` function with an init_value of 1, N of 120, and our mean/sd pair
 
 ```{r}
-simulation_confirm_all(1, 10, mean, stddev)
+simulation_confirm_all_test <- simulation_confirm_all(1, 120, mean_port_return, stddev_port_return)
+
+tail(simulation_confirm_all_test)
 ```
 
-Alright, another successful confirmation, this time with a function.  
+3 functions, 3 simulations, consistent results.  
 
 Now we are ready to run more than one simulation. 
 
 First, we'll need an object to hold all these simulations. Let's creat an empty matrix with 51 columns, an initial value of 1 and intuitive column names. Why 51 instead of 50? I want the median simulation to have a value that maps to an actual simulation. 
+
+We will use the `rep()` function to create 51 rows with a `1` as the value.
 
 ```{r}
 sims <- 51
@@ -154,28 +175,38 @@ starts <-
   set_names(paste("sim", 1:sims, sep = ""))
 ```
 
-Take a peek at the `starts` object. 
+Take a peek at the `starts` object to see what we just created and how it can house our simulations.
 
 ```{r}
 head(starts)
+tail(starts)
 ```
  This is where we'll store the results of the 51 simulations.
  
- Now we want to apply one of our simulation functions to each of the 51 columns of the `starts` matrix and we will do that using the `map_dfc()` function from the `purrr` package. `map_dfc` will take a vector, in this case the row of 1's in the `starts` object and apply a function to it, in this case whichever simulation function we choose.  By appending `_dfc()` to the base `map()` function, we are asking the function to store each of its results as the column of a dataframe. After running the code flow, we will have a dataframe with 51 columns, one for each of our simulations. We need to choose how many months to simulate (the N argument to our simulation function) and supply the mean/sd pair before. 
+Now we want to apply one of our simulation functions (we will go with `simulation_accum_1`) to each of the 51 columns of the `starts` matrix and we will do that using the `map_dfc()` function from the `purrr` package. 
+
+`map_dfc` will take a vector, in this case the row of 1's in the `starts` object and apply a function to it, in this case whichever simulation function we choose.  By appending `_dfc()` to the base `map()` function, we are asking the function to store each of its results as the column of a data frame. After running the code below, we will have a data frame with 51 columns, one for each of our simulations. 
+
+We need to choose how many months to simulate (the N argument to our simulation function) and supply the mean/sd pair as we did before. We don't need to supply the `init_value` argument because the `init_value` is 1, that same 1 which is in the 51 columns. 
 
 
 ```{r}
-monte_carlo_simd_1 <- 
-  map_dfc(starts, simulation_accum_1, N = 120, mean = mean, stdev = stddev)
+monte_carlo_sim_51 <- 
+  map_dfc(starts, simulation_accum_1, N = 120, mean = mean_port_return, stdev = stddev_port_return)
 
-tail(monte_carlo_simd_1)
+tail(monte_carlo_sim_51)
 ```
 
-Have a look at the results. We now have 51 simulations of the growth of a dollar! Let's add one more piece to help with charting. We simulated 120 months so let's add a column, called `month` that is numbered 1 through 120.  We will use `mutate(month = seq(1:nrow(.)))` and then clean up the column names and order.
+Have a look at the results. We now have 51 simulations of the growth of a dollar and we simulated that growth over 120 months. 
+
+
+Let's add one more piece to help with charting. We simulated 120 months so let's add a column, called `month` that is numbered 1 through 120.  We will use `mutate(month = seq(1:nrow(.)))` and then clean up the column names and order. `nrow()` is equal to the number of rows in our object. If we were to change to 130 simulations, that would generate 130 rows, and `nrow()` would be equal to `130.
 
 ```{r}
 monte_carlo_simd_1 <- 
-  map_dfc(starts, simulation_accum_1, N = 120, mean = mean, stdev = stddev) %>% 
+  map_dfc(starts, simulation_accum_1,
+          N = 120, mean = mean_port_return, 
+          stdev = stddev_port_return) %>% 
   mutate(month = seq(1:nrow(.))) %>% 
   select(month, everything()) %>% 
   `colnames<-`(c("month", names(starts)))
@@ -185,7 +216,7 @@ tail(monte_carlo_simd_1)
 
 Now we have 51 columns of simulations and 1 column of months. Note that we have 121 rows because we started with an intitial value of $1, and then simulated returns over 120 months. 
 
-Let's visualize the results with `ggplot()` - the fun part of simulation. We'll start with a chart of all 51 simulations and give different color to each one by setting `ggplot(aes(x = month, y = growth, color = sim))`.  `ggplot()` will automatically generate a legend for all 51 time series but that gets quite crowded. We will suppress the legend with `theme(legend.position="none")`.
+Let's visualize the results with `ggplot()` - the fun part of simulation. We'll start with a chart of all 51 simulations and give different color to each one by setting `ggplot(aes(x = month, y = growth, color = sim))`.  `ggplot()` will automatically generate a legend for all 51 time series but that gets quite crowded. We will suppress the legend with `theme(legend.position = "none")`.
 
 ```{r}
 monte_carlo_simd_1 %>% 
@@ -197,7 +228,7 @@ monte_carlo_simd_1 %>%
 ```
 
 
-Alright, we see quite a range of returns. Let's check the minimum, maximum and median simulation. 
+Alright, we see quite a range of returns. Let's check the minimum, maximum and median simulation. We will use the `summarise()` function here.
 
 ```{r}
 
@@ -232,16 +263,18 @@ quantiles <-
   `colnames<-`("value") %>% 
   mutate(probs = probs) %>% 
     spread(probs, value)
-quantiles[,1:6]
+
+quantiles[, 1:6]
+
 ```
 
-Huzzah! Our 95% confidence interval for the growth of a dollar is between `r quantiles[,2]` and `r quantiles[,6]`. 
+Our 95% confidence interval for the growth of a dollar is between `r quantiles[,2]` and `r quantiles[,6]`. 
 
 Our .5% super outlier negative result is `r quantiles[,1]`. 
 
 Are we the Brunelleschi of portfolio construction? Or have we based our assumptions off of returns during an unstoppable bull market that's been chugging along since well before 2013? When we get to Shiny and let users choose different start dates, we will find out the hard but inescapable truth about our own genius and how it relates to bull markets.
 
-We can isolate or eliminate some of the noise from our simulations and pull out certain time series. We have already calculated the maximum, minimum and median end growth values. Let's use `filter(any())` from `dplyr` to isolate those three simulations and then visualizd with `ggplot`. 
+We can isolate or eliminate some of the noise from our simulations and pull out certain time series. We have already calculated the maximum, minimum and median end growth values. Let's use `filter(any())` from `dplyr` to isolate those three simulations and then visualize with `ggplot`. 
 
 ```{r}
 monte_carlo_simd_1 %>% 
