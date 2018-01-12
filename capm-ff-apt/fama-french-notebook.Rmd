@@ -1,0 +1,162 @@
+---
+title: "Fama French"
+output:
+     pdf_document:
+         latex_engine: xelatex
+---
+
+FF or coming full circle! Why, because it's all about the data wrangling. Popping to our functions isn't that hard, as we'll see, once the data is lined up and in good shape.
+ This one is going to get a little tricky - and that's why we're going to tackle it!
+
+
+```{r setup, include = FALSE}
+
+library(tidyquant)
+library(tidyverse)
+library(timetk)
+library(broom)
+library(tibbletime)
+library(highcharter)
+library(scales)
+
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+
+load("~/reproducible-fin-chapters/returns/book-data.Rdata")
+```
+
+We need to get the Fama French factors data. That's not readily available on yahoo! Luckily FF make their factor data readily available on their website. But they store them in zip files so we'll need to do a bit more than call `read_csv()`.  
+
+Let's use the `tempfile()` function from base R to create a variable called `temp`. This is where we will put the zipped file.
+
+```{r}
+temp <- tempfile()
+```
+
+Have a look at the object.
+
+```{r}
+temp
+```
+
+R has created a temporary file that will be cleaned up when we exit this session.
+
+Now we run `downloadfile()` and give it the URL address of the zip, which is "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_3_Factors_CSV.zip", and we tell the function to store that data in `temp`.
+
+```{r}
+download.file(
+  "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_3_Factors_CSV.zip",
+  temp)
+```
+
+We want to read the csv file using `read_csv()` but first we need to unzip that data with the `unz()` function. Give it a try with the code below:
+
+
+```{r}
+
+Global_3_Factors <- read_csv(unz(temp, "Global_3_Factors.csv"))
+
+head(Global_3_Factors)  
+```
+Totally out of whack! Evidently there is some metadata in that csv file that is making hard for the function to parse. 
+
+When this occurs, it *usually* can be fixed by skipping a certain number of rows that sometimes contain helpful to humans but confusing to computers metadata. Have a look at what happens if we skip 6 rows. 
+
+```{r}
+
+Global_3_Factors <- read_csv(unz(temp, "Global_3_Factors.csv"), 
+    skip = 6)
+
+head(Global_3_Factors)
+```
+Okay, this is what were were expecting. 5 columns:  one called `X1` that holds the weirdly Bloomberg formatted dates, then `Mkt-Rf` for the market returns, `SMB` for the small big factor, `HML` for the high minus low (or value premium) factor, and `RF` for the risk-free rate. 
+
+Let's clean up the column names with `rename()`.
+
+```{r}
+Global_3_Factors <- 
+  read_csv(unz(temp, "Global_3_Factors.csv"), skip = 6) %>% 
+  rename(date = X1, MKT = `Mkt-RF`)
+
+head(Global_3_Factors)
+```
+
+```{r}
+Global_3_Factors <- 
+  read_csv(unz(temp, "Global_3_Factors.csv"), skip = 6) %>% 
+  rename(date = X1, MKT = `Mkt-RF`) %>%
+  mutate(date = ymd(parse_date_time(date, "%Y%m")))
+
+head(Global_3_Factors)
+
+```
+
+But we don't want the entire data set, just the part that matches our returns.
+
+```{r}
+
+
+Global_3_Factors <- 
+  read_csv(unz(temp, "Global_3_Factors.csv"), skip = 6) %>% 
+  rename(date = X1, MKT = `Mkt-RF`) %>%
+  mutate(date = ymd(parse_date_time(date, "%Y%m+"))) %>% 
+  filter(date >= (first(portfolio_returns_tq_rebalanced_monthly$date) - months(1))) %>% 
+  filter(date <= last(portfolio_returns_tq_rebalanced_monthly$date)) %>%
+  mutate_if(is.character,as.numeric)
+
+# try to match by month
+```
+
+
+```{r}
+tail(Global_3_Factors)
+tail(portfolio_returns_tq_rebalanced_monthly)
+```
+
+
+Can we merge these objects with a `left_join()`? 
+
+```{r}
+ff_portfolio_returns <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  left_join(Global_3_Factors)
+
+ff_portfolio_returns
+```
+Have a look at the result: all of the Fama French factors have gone to NA. Why is that? Our date columns do not *exactly* match, and thus the FF columns get put to NA.
+
+Instead, we need to add the FF data to our original `tibble` of monthly returns. Let's try that: 
+```{r}
+ff_portfolio_returns <- 
+  portfolio_returns_tq_rebalanced_monthly %>%
+  #slice(-59:-60) %>% 
+  mutate(MKT = Global_3_Factors$MKT/100,
+         SMB = Global_3_Factors$SMB/100,
+         HML = Global_3_Factors$HML/100,
+         RF = Global_3_Factors$RF,
+         R_excess = returns - RF )
+```
+An error! The data are not of the same length. We have 58 observations for the FF data and 59 for our monthly returns. Why? FF have data 
+
+
+A now, the easiest part of our excercise, and the only part that end users will care about, the modeling. Why was it easy? We can copy/paste the flow from our CAPM work.
+
+```{r}
+ff_dplyr_byhand <-
+  ff_portfolio_returns %>% 
+  do(model = lm(R_excess ~ MKT + SMB + HML, data = .)) %>% 
+  tidy(model)
+
+ff_dplyr_byhand
+```
+
+
+Take away: the intersesting part was the easiest. It was the wrangling that was hard. That's why we spent so much time on it.
+
+Market is not SPY. It's In October 2012, we revised the market return used to measure Rm-Rf in the US. It is now the value-weight return of all CRSP firms incorporated in the US and listed on the NYSE, AMEX, or NASDAQ that have (i) a CRSP share code of 10 or 11 at the beginning of month t, (ii) good shares and price data at the beginning of t, and (iii) good return data for t.
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+

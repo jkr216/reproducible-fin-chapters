@@ -5,7 +5,6 @@ output:
          latex_engine: xelatex
 ---
 
-# Volatility
 
 ```{r setup, message = FALSE}
 library(tidyquant)
@@ -16,35 +15,42 @@ library(highcharter)
 
 knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 
-load("~/reproducible-fin-chapters/book-data.Rdata")
+load("~/reproducible-fin-chapters/returns/book-data.Rdata")
 ```
 
 Welcome to our chapter focused on portfolio volatility, variance and standard deviation. I realize that it's a lot more fun to ~~fantasize about~~ analyze stock returns which is why television shows and websites constantly update the daily market returns and give them snazzy green and red colors. But good ol'volatility is quite important in its own right, especially to finance geeks, aspiring finance geeks and institutional investors. If you are, might become, or might ever work with/for any of those, this chapter should at least serve as a jumping off point.
-
-A quick word of warning that this chapter begins at the very beginning with portfolio standard deviation and builds up to more complex work. R users with experience in the world of volatility may wish to skip a few sections or head straight to the Shiny sections.  That said, I would humbly offer a couple of benefits to the R code that awaits us. 
-
-First, volatility is important, possibly more important than returns. I don't think any investment professional looks back on hours spent pondering volatility as a waste of time. 
-
-Second, we will unsurprisingly emphasize reproducibility and making our code readable/reusable. It's a good template for other statistical work, even if standard deviation is old hat for you.
-
 
 ## Introduction to Volatility
 
 We will start with the textbook equation for the standard deviation of a multi-asset portfolio. 
 
-Here is the equation for sd: 
+Here is the equation. 
 
 $$Standard~Deviation=\sqrt{\sum_{t=1}^n (x_i-\overline{x})^2/n}$$
+where x is each monthly portfolio return and x-bar is the mean monthly return. For a multi-asset portfolio, the equation is not simply the weighted variances of each asset. Instead, it's the weight squared of each asset times that asset's variance, plus the covariance of each asset times the weights of those assets. 
+
+Here is that equation for a 5-asset portfolio. 
+
+$$Standard~Deviation=$$
+$$w_{asset1}^{2} * var_{asset1} ~+~ w_{asset2}^{2} * var_{asset2} ~+~$$     
+$$w_{asset3}^{2} * var_{asset3} ~+~ w_{asset4}^{2} * var_{asset4} ~+~$$      
+$$w_{asset5}^{2} * var_{asset5} ~+~ w_{asset1}*w_{asset_2}*cov_{asset 1, ~asset 2} ~+~$$      
+$$w_{asset1}*w_{asset_3}*cov_{asset 1, ~asset 3} ~+~$$
+$$w_{asset1}*w_{asset_4}*cov_{asset 1, ~asset 4} ~+~$$
+$$w_{asset1}*w_{asset_5}*cov_{asset 1, ~asset 5} ~+~$$
+$$w_{asset2}*w_{asset_3}*cov_{asset 2, ~asset 3} ~+~$$
+$$w_{asset2}*w_{asset_4}*cov_{asset 2, ~asset 4} ~+~$$
+$$w_{asset2}*w_{asset_5}*cov_{asset 2, ~asset 5} ~+~$$
+$$w_{asset3}*w_{asset_4}*cov_{asset 3, ~asset 4} ~+~$$
+$$w_{asset3}*w_{asset_5}*cov_{asset 3, ~asset 5} ~+~$$
+$$w_{asset4}*w_{asset_5}*cov_{asset 4, ~asset 5}$$
 
 
-- First, we assign the weights of each asset.
-- Then, we isolate and assign returns of each asset. 
-- Next, we plug those weights and returns into the equation for portfolio standard deviation, which involves the following:
-- Take the weight squared of each asset times it's variance and sum those weighted variance terms.
-- Then we take the covariance of each asset pair, multiplied by 2 times the weight of the first asset times the weight of the second asset. 
-- Sum together the covariance terms and the weighted variance terms. 
-- This gives us the portfolio variance. 
-- Then take the square root to get the standard deviation. 
+
+Now, let's use that equation and calculate portfolio standard deviation by-hand.
+
+First, we assign the weights of each asset, based on the `w` vector we created earlier in the Returns section.
+Then, we isolate and assign returns of each asset and plug those weights and returns into the equation for portfolio standard deviation.
 
 
 ```{r By Hand Std Dev}
@@ -62,13 +68,10 @@ asset4 <- asset_returns_xts[,4]
 asset5 <- asset_returns_xts[,5]
  
 
-sd_by_hand <- 
-  # Important, don't forget to take the square root! 
+sd_by_hand <-  
   sqrt(
-  # Our weighted variance terms.  
   (w_1^2 * var(asset1)) + (w_2^2 * var(asset2)) + (w_3^2 * var(asset3)) +
   (w_4^2 * var(asset4)) + (w_5^2 * var(asset5)) +
-  # Our weighted covariance terms
   (2 * w_1 * w_2 * cov(asset1, asset2)) +  
   (2 * w_1 * w_3 * cov(asset1, asset3)) +
   (2 * w_1 * w_4 * cov(asset1, asset4)) +
@@ -81,7 +84,12 @@ sd_by_hand <-
   (2 * w_4 * w_5 * cov(asset4, asset5))
   )
 
-# I want to print the percentage, so multiply by 100.
+sd_by_hand
+```
+
+It's nice to display this number as percentage in the investment world. 
+
+```{r}
 sd_by_hand_percent <- round(sd_by_hand * 100, 2)
 
 ```
@@ -94,14 +102,13 @@ First, we will build a covariance matrix of returns using the `cov()` function.
 
 ```{r}
 
-# Build the covariance matrix. 
 covariance_matrix <- cov(asset_returns_xts)
 covariance_matrix
 ```
 
 Have a look at the covariance matrix. 
 
-AGG, the US bond ETF, has a negative or very low covariance with the other ETFs and it should make a nice volatility dampener.  Interestingly, the covariance between EEM and EFA is quite low as well.  Our painstakingly written-out equation above is a good reminder of how low covariances affect total portfolio standard deviation.
+AGG, the US bond ETF, has a negative or very low covariance with the other ETFs and it should make a nice volatility dampener.  Interestingly, the covariance between EEM and EFA is quite low as well.  Our painstakingly written-out equation above is a good reminder of how low covariances affect total portfolio standard deviation, and how negative covariances can really lower total portfolio standard deviation.
 
 Back to our calculation, let's take the square root of the transpose of the weights vector times the covariance matrix times the weights vector. To perform matrix multiplcation, we use `%*%`.
 
@@ -160,11 +167,13 @@ portfolio_sd_tidy_builtin_percent
 
 That was quite a lot of work to confirm that 5 calculations are equal to each other but there are a few benefits.
 
-First, while it was tedious, we should feel comfortable with calculating portfolio standard deviations in various ways and starting from different object types.
+First, while it was tedious, we should feel comfortable with calculating portfolio standard deviations in various ways and starting from different object types. That can be useful when an external team or client dumps data on us and that data has a weird (to us, it's probably normal to them) format.
 
-More importantly, as our work gets more complicated and we build custom functions, we'll want to rely on the built-in `StdDev` function and the built-in tidy workflow.  Our tedious work here, where we used different flows and functions by choice, will facilitate our future work when we need to solve harder coding challenges.  
+More importantly, as our work gets more complicated and we build custom functions, we'll want to rely on the built-in `StdDev()` function and the built-in tidy workflow. We'll also want to manipulate data and slice/dice things for rolling calculations.  Our tedious work here, where we used different flows and functions by choice, will facilitate our future work when we need to solve harder coding challenges.  
 
 Beyond helping our own work, it can help our colleagues to understand the more complex work if we can point back to this starter code flow on standard deviation.  
+
+MORE ON WHY WE DID THAT. How does it tie into the dat vis, repro and future work. 
 
 # Visualize 
 
@@ -852,7 +861,10 @@ asset_returns_dplyr_byhand <- eventReactive(input$go, {
     select(date, symbols) %>% 
     slice(-1)
 })
+```
 
+
+```{r, eval = FALSE}
 percentages_tibble_pre_built <- eventReactive(input$go, {
   
   asset_returns_xts <- 
@@ -878,7 +890,11 @@ percentages_tibble_pre_built <- eventReactive(input$go, {
     select(asset, everything())
   
 })
+```
 
+
+
+```{r, eval = FALSE}
 portfolio_vol_components_tidy <- eventReactive(input$go, {
   
   asset_returns_dplyr_byhand <- asset_returns_dplyr_byhand()

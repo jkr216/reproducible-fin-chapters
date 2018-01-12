@@ -210,7 +210,6 @@ Since there is only one column of returns, there is no wide versus long format f
 
 By-hand, xts and tidyquant, each has its uses and advantages depending on our end goal.  Next time we will think about how to visualize portfolio returns, and how the different objects fit into different visualization paradigms. 
 
-### End First Post
 
 ### Visualize
 

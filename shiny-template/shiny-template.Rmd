@@ -1,0 +1,160 @@
+---
+title: "Shiny Template"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+---
+
+
+```{r setup, message = FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(highcharter)
+library(tidyquant)
+library(timetk)
+library(shiny)
+library(scales)
+```
+
+Sidebar {.sidebar}
+=====================================
+  
+```{r}
+
+fluidRow(
+  column(7,
+  textInput("stock1", "Stock 1", "SPY")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(7,
+  textInput("stock2", "Stock 2", "EFA")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  textInput("stock3", "Stock 3", "IJS")),
+  column(5,
+  numericInput("w3", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  textInput("stock4", "Stock 4", "EEM")),
+  column(5,
+  numericInput("w4", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  textInput("stock5", "Stock 5", "AGG")),
+  column(5,
+  numericInput("w5", "Portf. %", 10, min = 1, max = 100))
+)
+
+
+fluidRow(
+  column(7,
+  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd")))
+
+fluidRow(
+  column(4,
+  numericInput("window", "Window", 24, min = 3, max = 24, step = 2))
+)
+
+actionButton("go", "Submit")
+```
+
+```{r}
+# We need prices for all of our Shiny apps.
+prices <- eventReactive(input$go, {
+  
+  symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
+  
+  getSymbols(symbols, src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+})
+
+# portfolio returns xts
+
+# portfolio returns tidy
+
+```
+
+Portfolio vis
+=====================================  
+
+Row {data-height=600}
+-----------------------------------------------------------------------
+
+### Vis 1
+
+```{r}
+renderHighchart({
+  
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, rfr, rolling window and start date and click submit."))
+  
+  highchart(type = "stock") %>%
+  hc_title(text = "NAME") %>%
+  hc_add_series(placeholder_xts_object, name = "NAME", color = "cornflowerblue")%>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE) 
+
+  
+})
+```
+
+
+
+Row {.tabset .tabset-fade}
+-------------------------------------
+
+### Scatterplot
+
+```{r, message = FALSE}
+renderPlot({
+  
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, rfr, rolling window and start date and click submit."))
+
+  tidy_placeholder %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = ), colour = "") + 
+  geom_vline(xintercept = as.numeric(as.Date("2016-11-30")), color = "blue") +
+  geom_hline(yintercept = rfr, color = "purple", linetype = "dotted") +
+  annotate(geom="text", x=as.Date("2016-11-30"), 
+           y = -.05, label = "Trump", fontface = "plain", 
+           angle = 90, alpha = .5, vjust =  1.5) +
+  ylab("label")
+})
+```
+
+
+### Histogram
+
+```{r}
+renderPlot({
+  
+  tidy_object_placeholder %>% 
+    ggplot(aes(x = returns)) +
+    geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue") +
+    geom_vline(xintercept = rfr, color = "green") +
+    annotate(geom = "text", x = rfr, 
+             y = 10, label = "rfr", fontface = "plain", 
+             angle = 90, alpha = .5, vjust =  1)
+})
+```
+
+
+
+
+
+
+

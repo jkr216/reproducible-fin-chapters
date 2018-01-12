@@ -4,17 +4,17 @@ runtime: shiny
 output:
   flexdashboard::flex_dashboard:
     orientation: rows
+    source_code: embed
 ---
 
 
 ```{r setup, message = FALSE}
-library(flexdashboard)
 library(tidyverse)
 library(highcharter)
 library(tidyquant)
 library(timetk)
-library(shiny)
 ```
+
 
 Sidebar {.sidebar}
 =====================================
@@ -59,11 +59,14 @@ fluidRow(
 
 fluidRow(
   column(7,
-  dateInput("date", "Starting Date", "2010-01-01", format = "yyyy-mm-dd")),
+  dateInput("date", "Starting Date", "2010-01-01", format = "yyyy-mm-dd"))
+)
+
+fluidRow(
   column(5,
-  numericInput("mar", "MAR", .008, min = 0, max = 1, step = .001)),
-  column(4,
-  numericInput("window", "Window", 24, min = 3, max = 24, step = 2))
+  numericInput("mar", "MAR %", .8, min = 0, max = 3, step = .01)),
+  column(5,
+  numericInput("window", "Window", 6, min = 2, max = 24, step = 2))
 )
 
 actionButton("go", "Submit")
@@ -80,29 +83,33 @@ prices <- eventReactive(input$go, {
   `colnames<-`(symbols)
 })
 
-mar <- eventReactive(input$go, {input$mar})
+mar <- eventReactive(input$go, {input$mar/100})
 
 rolling_sortino <- eventReactive(input$go, {
+  validate(need(input$w1 + input$w2 + input$w3 + input$w4 + input$w5 == 100, "The portfolio weights must sum to 100%!"))
+  
   prices <- prices()
   w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
   MAR <- mar()
   window <- input$window
 
-# XTS world
-
 prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
 asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
 
-portfolio_returns_xts <- Return.portfolio(asset_returns_xts, weights = w)
+portfolio_returns_xts_rebalanced_monthly <- Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "months")
 
 rolling_sortino <-
-  apply.rolling(portfolio_returns_xts, window, fun =  "SortinoRatio", MAR = MAR) %>% 
-  `colnames<-`("24-rolling")
+  apply.rolling(portfolio_returns_xts_rebalanced_monthly, window, 
+            fun = 'SortinoRatio',  MAR = MAR) %>% 
+  `colnames<-`(paste(window, "-month rolling sortino", sep=""))
 })
 
-sortino_byhand <- eventReactive(input$go, {
+portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
+  
+validate(need(input$w1 + input$w2 + input$w3 + input$w4 + input$w5 == 100, "The portfolio weights must sum to 100%!"))
   
   prices <- prices()
+  
   w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
   
   asset_returns_long <- 
@@ -112,23 +119,20 @@ sortino_byhand <- eventReactive(input$go, {
       gather(asset, returns, -date) %>% 
       group_by(asset) %>%  
       mutate(returns = (log(returns) - log(lag(returns))))
+  
+  MAR <- mar()
 
-portfolio_returns_tidy <- 
+portfolio_returns_tq_rebalanced_monthly <- 
   asset_returns_long %>% 
   tq_portfolio(assets_col = asset, 
                returns_col = returns, 
                weights = w,
-               col_rename = "returns")
+               col_rename = "returns",
+               rebalance_on = "months") %>% 
+  mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA)) %>%
+  mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))
 
-MAR <- mar()
-
-sortino_byhand <- 
-  portfolio_returns_tidy %>% 
-  slice(-1) %>% 
-  mutate(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)),
-         returns_below_MAR = ifelse(returns < MAR, returns, NA),
-         returns_above_MAR = ifelse(returns > MAR, returns, NA))
-
+portfolio_returns_tq_rebalanced_monthly
 })
 
 ```
@@ -144,38 +148,17 @@ Row {data-height=600}
 ```{r}
 renderHighchart({
   
+validate(need(input$go != 0, "Please choose your portfolio assets, weights, MAR, rolling window and start date and click submit."))
+  
+  
   highchart(type = "stock") %>%
-  hc_title(text = "Rolling Sortino") %>%
-  hc_add_series(rolling_sortino(), name = "Sortino", color = "cornflowerblue") %>%
+  hc_title(text = names(rolling_sortino())) %>%
+  hc_add_series(rolling_sortino(), name = names(rolling_sortino()), color = "cornflowerblue") %>%
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE) 
-
-  
+ 
 })
 ```
-
-Row {data-height=150}
------------------------------------------------------------------------
-
-### The Sortino Ratio of Your Portfolio
-
-```{r}
-valueBoxOutput("approvalBox1")
-output$approvalBox1<-renderValueBox({
-  valueBox(value = 6, color = "primary")
-})
-```
-
-### Sortino Ratio of S&P500 in same time period
-
-```{r}
-
-valueBoxOutput("approvalBox2")
-output$approvalBox2<-renderValueBox({
-  valueBox(value = 5, color = "primary")
-})
-```
-
 
 
 Row {.tabset .tabset-fade}
@@ -185,10 +168,12 @@ Row {.tabset .tabset-fade}
 
 ```{r, message = FALSE}
 renderPlot({
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, MAR, rolling window and start date and click submit."))
   MAR <- mar()
-  sortino_byhand <- sortino_byhand()
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
   
-  ggplot(data = sortino_byhand, aes(x = date)) +
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  ggplot(aes(x = date)) +
   geom_point(aes(y = returns_below_MAR), colour = "red") +
   geom_point(aes(y = returns_above_MAR), colour = "green") + 
   geom_vline(xintercept = as.numeric(as.Date("2016-11-30")), color = "blue") +
@@ -205,10 +190,11 @@ renderPlot({
 
 ```{r}
 renderPlot({
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, MAR, rolling window and start date and click submit."))
   MAR <- mar()
-  sortino_byhand <- sortino_byhand()
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
   
-  sortino_byhand %>% 
+  portfolio_returns_tq_rebalanced_monthly %>% 
     ggplot(aes(x = returns)) +
     geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue") +
     geom_vline(xintercept = MAR, color = "green") +
@@ -222,10 +208,11 @@ renderPlot({
 
 ```{r}
 renderPlot({
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, MAR, rolling window and start date and click submit."))
   MAR <- mar()
-  sortino_byhand <- sortino_byhand()
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
   
-  sortino_density_plot <- sortino_byhand %>% 
+  sortino_density_plot <- portfolio_returns_tq_rebalanced_monthly %>% 
     ggplot(aes(x = returns)) +
     stat_density(geom = "line", size = 1, color = "cornflowerblue") 
   
@@ -234,8 +221,6 @@ renderPlot({
 
   sortino_density_plot + 
   geom_area(data = shaded_area_data, aes(x = x, y = y), fill="pink", alpha = 0.5) +
-  #geom_segment(aes(x = (MAR - .01), y = 1, xend = (MAR - .04), yend = 1),
-  #arrow = arrow(length = unit(0.5, "cm"))) +
   geom_segment(data = shaded_area_data, aes(x = MAR, y = 0, xend = MAR, yend = y), 
                color = "red", linetype = "dotted") +
   annotate(geom = "text", x = MAR, y = 5, label = paste("MAR =", MAR, sep = ""), 
@@ -246,8 +231,4 @@ renderPlot({
 })
 
 ```
-
-
-
-
 

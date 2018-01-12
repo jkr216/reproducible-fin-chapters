@@ -1,0 +1,167 @@
+---
+title: "Capm Beta Shiny"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+---
+
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(highcharter)
+library(tidyquant)
+library(timetk)
+library(scales)
+library(broom)
+```
+
+Sidebar {.sidebar}
+=====================================
+  
+```{r}
+
+fluidRow(
+  column(6,
+  textInput("stock1", "Stock 1", "SPY")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(6,
+  textInput("stock2", "Stock 2", "EFA")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock3", "Stock 3", "IJS")),
+  column(5,
+  numericInput("w3", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock4", "Stock 4", "EEM")),
+  column(5,
+  numericInput("w4", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock5", "Stock 5", "AGG")),
+  column(5,
+  numericInput("w5", "Portf. %", 10, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd"))
+)
+
+actionButton("go", "Submit")
+```
+
+
+```{r}
+prices <- eventReactive(input$go, {
+  
+  symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
+  
+  getSymbols(symbols, src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+})
+
+
+market_return <- eventReactive(input$go, {
+  market_return <- 
+    getSymbols("SPY", src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Ad(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`("SPY") %>% 
+    to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+    mutate(returns = (log(SPY) - log(lag(SPY)))) %>% 
+    na.omit() %>%
+    select(date, returns)
+  
+})
+
+
+portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
+  
+  prices <- prices()
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  portfolio_returns_tq_rebalanced_monthly <- 
+      prices %>% 
+      to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+      tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+      gather(asset, returns, -date) %>% 
+      group_by(asset) %>%  
+      mutate(returns = (log(returns) - log(lag(returns)))) %>% 
+      na.omit() %>%
+      tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
+})
+
+beta_dplyr_byhand <- eventReactive(input$go, {
+  
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
+  
+  market_return <- market_return()
+  
+  beta_dplyr_byhand <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  do(model = lm(returns ~ market_return$returns, data = .)) %>% 
+  tidy(model) %>% 
+  mutate(term = c("alpha", "beta"))
+  
+})
+```
+
+Capm Beta
+=====================================  
+
+Row {data-height=600}
+-----------------------------------------------------------------------
+
+### scatter
+
+```{r}
+renderPlot({
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
+  market_return <- market_return()
+  
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_return$returns) %>% 
+  ggplot(aes(x = market_returns, y = returns)) + 
+  geom_point(color = "cornflowerblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "green") +
+  ylab("portfolio returns") +
+  xlab("market returns")
+})
+```
+
+Row 2
+----------------------------------
+
+### Model Results
+
+```{r}
+renderTable({
+  beta_dplyr_byhand()
+}, digits = 4)
+```
+
+

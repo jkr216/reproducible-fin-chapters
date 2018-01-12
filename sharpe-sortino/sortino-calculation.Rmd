@@ -1,44 +1,42 @@
 ---
 title: "Sortino Notebook"
 output:
+  pdf_document:
+         latex_engine: xelatex
+  html_notebook: default
   html_document:
     df_print: paged
-  html_notebook: default
-  pdf_document: default
 ---
 
-```{r, include = FALSE}
+```{r setup, include = FALSE}
+
+library(tidyquant)
+library(tidyverse)
+library(timetk)
+library(broom)
+library(tibbletime)
+library(highcharter)
+library(scales)
+
 knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+
+load("~/reproducible-fin-chapters/returns/book-data.Rdata")
 ```
 
-Today, we begin a project to build a Shiny application that allows a user to build a portfolio and calculate/visualize its Sortino Ratio. 
 
-The final app is viewable [here](https://jkr216.shinyapps.io/Sortino-Shiny/) but we'll spend the next 3 posts contructing that.
 
-By way of brief background and motivation for this project, the Sortino Ratio is a measure of the return/risk ratio of a portfolio and is an important tool for evaluating the risk adjusted returns of a portfolio and the skill of the portfolio manager. A higher Sortino indicates a portfolio manager who is generating higher returns per unit of risk absorbed.  Identifying better performing portfolios and portfolio managers is crucial for quants, data scientist and analysts at banks, endowments, investment advisors, funds of funds, hedge funds - all enterprise-level participants in the world of asset management.  From a data science perspective, we want to accomplish this using a reproducible work flow and an appealing, digestible end product.  As someone who used to work in finance and now works at RStudio, I find a Sortino Ratio Shiny app to be a thrilling combination of portfolio theory, statistical analysis and data visualization. Let's get to it!
+The theory behind the Sortino Ratio is that the riskiness of a portfolio is better measured by the deviation of returns *below* a target return, instead of by the standard deviation of all returns.  This stands in contradistinction to the more used Sharpe Ratio, which measures return/risk by the ratio of the returns above the risk free rate divided by the standard deviation of *all* returns.  By way of history, Harry Markowitz, Nobel laureate and father of MPT whom we mentioned in this sections' introduction, noted that downside deviation might be a better measure of risk than the standard deviation of all returns, but its calculation was computationally too expensive[^1] (it was 1959, if he only he'd had R on his laptop).
+
+[^1]: Markowitz, Harry. Portfolio Selection: Efficient Diversification of Investments, John Wiley & Sons, 1959
 
 The Sortino Ratio equation is as follows:   
 
 $$Sortino~Ratio_{portfolio}=\frac{(\overline{Return_{portfolio}-MAR})}{\sqrt{\sum_{t=1}^n min(R_t-MAR,~0)^2}/n}$$
 
-The denominator in that equation (called the Downside Deviation, semi-deviation or downside risk) can be thought of as the deviation of the returns that fall below some target rate of return for the portfolio. That target rate is called the Minimum Acceptable Rate, or MAR. The numerator is the mean portfolio return minus the MAR and can be thought of as excess returns. 
-
-The theory behind the Sortino Ratio is that the riskiness of a portfolio is better measured by the deviation of returns *below* a target return, instead of by the standard deviation of all returns.  This stands in contradistinction to the more commonly used Sharpe Ratio, which measures return/risk by the ratio of the returns above the risk free rate divided by the standard deviation of *all* returns.  By way of history, Harry Markowitz, Nobel laureate and father of modern portfolio theory, noted that downside deviation might be a better measure of risk than the standard deviation of all returns, but its calculation was computationally too expensive[^1] (it was 1959, if he only he'd had R on his laptop).
-
-[^1]: Markowitz, Harry. Portfolio Selection: Efficient Diversification of Investments, John Wiley & Sons, 1959.
-
-Frank Sortino's original article on downside deviation, "On the Use and Misuse of Downside Risk," was published in the [Journal of Portfolio Management](http://www.iijournals.com/doi/abs/10.3905/jpm.1996.35) in 1996 but you'll need a paid subscription to access that.
-
-More background is available from the [CME group](http://www.cmegroup.com/education/files/sortino-a-sharper-ratio.pdf), [Red Rock Capital](http://www.redrockcapital.com/Sortino__A__Sharper__Ratio_Red_Rock_Capital.pdf) and [CFA pubs](http://www.cfapubs.org/doi/pdf/10.2469/ipmn.v2012.n1.1).
+The denominator in that equation (called the Downside Deviation, semi-deviation or downside risk) can be thought of as the deviation of the returns that fall below some target rate of return for the portfolio. That target rate is called the Minimum Acceptable Rate, or MAR. The numerator is the mean portfolio return minus the MAR. It can be thought of as excess returns in the same was as the numerator of the Sharpe Ratio, except for Sortino it's in excess of whateve minimum rate our team (or our clients) choose.
 
 
-    
-Minimum Acceptable Rate
-    
-    + MAR = .008 or .8%
-    + Note we are holding this portfolio to a higher standard than being above 0%.
-
-Next we choose our asset weights and assign them to the variable `w`. We will also assign the MAR of .008 to the variable `MAR`.
+Let's assign the MAR of .8% to the variable `MAR`. Note that we are holding this portfolio to a higher standard now than we did in the last chapter.
 
 ```{r}
 
@@ -46,6 +44,9 @@ MAR <- .008
 
 ```
 
+Just as we reused a lot of our skewness code flow in our kurtosis calculation, we will reuse some Sharpe code flow for the Sortino calculations.
+
+In the `xts` world, very similar to the Sharpe Ratio, `PerformanceAnalytics` makes it quick to calculate Sortino. It's the same code as we used for Sharpe, except we call the function `SortinoRatio()` instead of `SharpeRatio()`, and the argument is `MAR = MAR` instead of `Rf = rfr`.
 
 ```{r}
 sortino_xts <- 
@@ -53,27 +54,23 @@ sortino_xts <-
   `colnames<-`("ratio")
 ```
 
-From a substantive perspective, we could stop here and start visualizing with `highcharter`. 
-
-Instead, we will run the calculation by-hand, implementing the equation for the Sortino Ratio via pipes and `dplyr`.  It's not a verbose piped workflow. In short, we call `summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))`.  
+We'll again head to `dplyr` and run a by-hand calculation with `summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))`. This should look familiar from the previous chapter, but with a different equation.
 
 
 ```{r}
 sortino_byhand <- 
   portfolio_returns_tq_rebalanced_monthly %>% 
   summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))
-
-sortino_byhand
 ```
 
 
-Now on to `tidyquant`, which allows us to apply the `SortinoRatio` function from `PerformanceAnalytics` to a `tibble`. As long as we are passing it the same data as we passed originally with the `xts` object, we expect the same result.
+Now on to `tidyquant`, which allows us to apply the `SortinoRatio` function from `PerformanceAnalytics` to a `tibble`. 
 
 
 ```{r}
 sortino_tidy <- 
   portfolio_returns_tq_rebalanced_monthly %>%
-  tq_performance(Ra= = returns, 
+  tq_performance(Ra = returns, 
                  performance_fun = SortinoRatio, 
                  MAR = MAR,
                  method = "full") %>% 
@@ -88,29 +85,56 @@ sortino_byhand$ratio
 sortino_tidy$ratio
 ```
 
-We have consistent results from `xts`, `tidyquant` and our by-hand piped calculation.   
-
-When we originally calculated Sortino by-hand in the tidy world, we used `summarise` to create one new cell for our end result. The code was `summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))`.  
-
-Now, we will make two additions to assist in our data visualization. We will add a column for returns that follow below MAR with `mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA))` and add a column for returns above MAR with `mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))`. This is not necessary for calculating the Sortino, but we will see how it makes our ggplotting a bit easier and it illustrates a benefit of doing things by-hand with `dplyr`: if we want to extract or create certain data tranformations, we can add it to the piped code flow.
+We have consistent results from `xts`, `tidyquant` and our by-hand piped calculation.
+Again, the Sortino Ratio is most informative when compared to other Sortino Ratios. Is our portfolio's Sortino good, great, awful? Let's compare it to the Sortino Ratio of the S&P500 in the same time period.
 
 ```{r}
 
-# Tibble object
+```{r, include=FALSE}
+market_returns_xts <- 
+    getSymbols("SPY", src = 'yahoo', from = "2013-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Ad(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`("SPY") %>% 
+    to.monthly(indexAt = "last", OHLC = FALSE) 
+
+market_returns_tidy <-
+  market_returns_xts %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+    mutate(returns = (log(SPY) - log(lag(SPY)))) %>% 
+    na.omit() %>%
+    select(date, returns)
+```
+
+
+```{r}
+market_returns_sortino <- 
+  market_returns_tidy %>% 
+  summarise(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.)))
+
+market_returns_sortino$ratio
+```
+
+Ok, once again, the S&P500 has beat our portfolio! That makes sense given that the S&P500 also had a higher Sharpe Ratio. 
+
+### Visualizing Sortino
+
+First, we will get a sense for what proportion of our portfolio returns exceeded the MAR.
+
+Very similar to our work on the Shapre Ratio, we will add a column for returns that fall below MAR with `mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA))` and add a column for returns above MAR with `mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))`. We do this with an eye towards `ggplot`.
+
+```{r}
 sortino_byhand <- 
   portfolio_returns_tq_rebalanced_monthly %>% 
   mutate(ratio = mean(returns - MAR)/sqrt(sum(pmin(returns - MAR, 0)^2)/nrow(.))) %>% 
-  # Add two new columns to help with ggplot.
   mutate(returns_below_MAR = ifelse(returns < MAR, returns, NA)) %>%
   mutate(returns_above_MAR = ifelse(returns > MAR, returns, NA))
 
 ```
 
-We now have two objects in our global environment, `sortino_xts` and `sortino_byhand`. 
-
-Let's work with `sortino_byhand` and start with a scatterplot of returns using `ggplot`. 
-
-The goal is to quickly grasp how many of our returns are above the MAR and how many are below the MAR. When we calculated the Sortino above, we created new columns for `returns_above_MAR` and `returns_below_MAR` columns. It makes this visualization a straightforward construct.
+Let's use that new object and it's new columns to create a scatterplot of returns using `ggplot`. 
+to again grasp how many of our returns are above the MAR and how many are below the MAR. 
 
 We will create green points for returns above MAR with `geom_point(aes(y = returns_above_MAR), colour = "green")` and red points for returns below MAR with `geom_point(aes(y = returns_below_MAR), colour = "red") `.  
 
@@ -124,7 +148,7 @@ sortino_byhand %>%
   geom_vline(xintercept = as.numeric(as.Date("2016-11-30")), color = "blue") +
   geom_hline(yintercept = MAR, color = "purple", linetype = "dotted") +
   annotate(geom="text", x=as.Date("2016-11-30"), 
-           y = -.15, label = "Election", fontface = "plain", 
+           y = -.05, label = "Election", fontface = "plain", 
            angle = 90, alpha = .5, vjust =  1.5) +
   ylab("percent monthly returns")
 ```
@@ -132,7 +156,7 @@ sortino_byhand %>%
 
 It appears that about half of our returns fall below the MAR. Do we consider that to be a successful portfolio? This is not a rigorous test - what strikes us from the number of red dots and where they fall? Do we notice a trend? A period with consistently below or above MAR returns?
 
-Since the election in 2016, there has been only one monthly return below the MAR and that will lead to a large Sortino since November. 
+Since the election in 2016, there has been only two monthly returns below the MAR and that will lead to a large Sortino since November. 
 
 Next we will build a histogram of the distribution of returns with `geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue")`. We will again add a line for the MAR.
 
@@ -146,9 +170,7 @@ sortino_byhand %>%
 
 ```
 
-I notice a slight negative skew and a mode that is above MAR - some good motivation to take note that the mean monthly return is `r round(mean(sortino_byhand$returns), 3)`, which is below our MAR of `r MAR`.  We already had a sense for this since the Sortino Ratio is negative.
-
-The Sortino Ratio and portfolio returns in general are usually accompanied by a density plot and we'll build one now. First, we will start simple with `stat_density(geom = "line", size = 1, color = "cornflowerblue")` to create a `ggplot` object called `sortino_density_plot`.
+The Sortino Ratio is often accompanied by a density plot and we'll build one now. First, we will start simple with `stat_density(geom = "line", size = 1, color = "cornflowerblue")` to create a `ggplot` object called `sortino_density_plot`.
 
 ```{r}
 
@@ -160,11 +182,9 @@ sortino_density_plot <-
 sortino_density_plot
 ```
 
-The slight negative skew is a bit more evident here. It would be nice to shade the area that falls below the MAR.  To do that, let's create an object called `shaded_area` using `ggplot_build(p)$data[[1]] %>% filter(x < MAR)`. That snippet will take our original `ggplot` object and create a new object filtered for x values less than MAR. Then we use `geom_area` to add the shaded area to `sortino_density_plot`.
+A slight negative skew is a bit more evident here. It would be nice to shade the area that falls below the MAR.  To do that, let's create an object called `shaded_area` using `ggplot_build(p)$data[[1]] %>% filter(x < MAR)`. That snippet will take our original `ggplot` object and create a new object filtered for x values less than MAR. Then we use `geom_area` to add the shaded area to `sortino_density_plot`.
 
 ```{r}
-# use ggplot_build to get the p object; it returns a list of 1 data frame, not a dataframe
-# so to access the dataframe we need to call [[1]]
 
 shaded_area_data <- ggplot_build(sortino_density_plot)$data[[1]] %>% 
   filter(x < MAR)
@@ -181,8 +201,8 @@ Let's add a vertical line label at the exact MAR and an arrow to tell people whe
 ```{r}
 
 sortino_density_plot_shaded +
-  geom_segment(aes(x = 0, y = 1, xend = -.05, yend = 1),
-  arrow = arrow(length = unit(0.5, "cm"))) +
+  geom_segment(aes(x = 0, y = 1.5, xend = -.05, yend = 1.5),
+  arrow = arrow(length = unit(0.4, "cm")), size = .05) +
   geom_segment(data = shaded_area_data, aes(x = MAR, y = 0, xend = MAR, yend = y), 
                color = "red", linetype = "dotted") +
   annotate(geom = "text", x = MAR, y = 5, label = "MAR = 0.8%", 
@@ -195,52 +215,90 @@ As with our scatterplot, we have not been shy about aesthetic layering but one g
 
 We have done some good work for visualizing the portfolio's returns and how they are distributed relative to the MAR, and how the MAR separates part of the the returns to downside risk. That gives us some intution about the Sortino Ratio.
 
-We have not, however, touched the actual Sortino Ratio yet.  We will do so now.  
-
-The ratio itself is one number: `r round(sortino_xts[1], 3)`. That doesn't allow much by way of dynamic visualization. So, we will visualize the Sortino Ratio over time and to do that we will need to calculate the rolling ratio. There is a slight wrinkle though - remember that we exclude above MAR returns from the denominator. If our rolling window is too small, we might end up with a denominator that includes 1 or 2 or 0 downside deviations. That would accurately reflect that the portfolio has done well in that small window but it might report a misleadingly huge number for the rolling window. The rolling 6 month demonstrates this. 
+As with Sharpe Ratio, let's get to some rolling Sortinos. There is a slight wrinkle though - remember that we exclude above MAR returns from the denominator. If our rolling window is too small, we might end up with a denominator that includes 1 or 2 or 0 downside deviations. That would accurately reflect that the portfolio has done well in that small window but it might report a misleadingly huge number for the rolling window. The rolling 6 month demonstrates this. 
 
 First, we need to calculate the rolling 6-month Sortino with `rollapply(portfolio_returns_xts, 6, function(x) SortinoRatio(x))`. Then we can visualize with `highcharter`.
 
 ```{r}
-# calculate 6-month rolling Sortino
-sortino_roll_6_xts <- 
-  rollapply(portfolio_returns_xts_rebalanced_monthly, 6,function(x) SortinoRatio(x, MAR = MAR)) %>% 
+
+portfolio_sortino_roll_6_xts <- 
+  rollapply(portfolio_returns_xts_rebalanced_monthly, 6, 
+            function(x) SortinoRatio(x, MAR = MAR)) %>% 
   `colnames<-`("6-rolling")
 
-sortino_roll_6[20:24]
 
 ```
 
-Take a quick peek at the rolling 6-month.
-
-Let's chart with `highcharter` and investigate other unusual occurrences when we slice the data.
+Let's take a quick peek at the rolling 6-month Sortino visualization and investigate other unusual occurrences when we slice the data.
 
 ```{r}
 highchart(type = "stock") %>%
   hc_title(text = "Rolling Sortino") %>%
-  hc_add_series(sortino_roll_6_xts, name = "Sortino", color = "blue") %>%
+  hc_add_series(portfolio_sortino_roll_6_xts, name = "Sortino", color = "cornflowerblue") %>%
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE)
 ```
 
-The rolling 6-month has so many bizarre spikes, e.g. a reading of in 2016! It nicely emphasizes how we need to be careful with the Sortino Ratio, short time periods and rolling applications.
+The rolling 6-month has so many bizarre spikes. It nicely emphasizes how we need to be careful with the Sortino Ratio, short time periods and rolling applications.
 
-Let's see how the rolling 12-month compares.
+Let's see how the rolling 24-month compares.
 
 ```{r}
-MAR <- .008
-sortino_roll_12_xts <- rollapply(portfolio_returns_xts_rebalanced_monthly, 24, 
+
+portfolio_sortino_roll_24_xts <- rollapply(portfolio_returns_xts_rebalanced_monthly, 24, 
                            function(x) SortinoRatio(x, MAR = MAR))
 
 highchart(type = "stock") %>%
   hc_title(text = "Rolling Sortino") %>%
-  hc_add_series(sortino_roll_12_xts, name = "Sortino 12", color = "green") %>%
+  hc_add_series(portfolio_sortino_roll_24_xts, name = "Sortino 24", color = "lightgreen") %>%
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE)
 ```
 
 Ah, much better. We can see the movements and how the Sortino has changed through the life of this portfolio, but within a reasonable range of .6 to -0.4.
 
-Rolling Sortinos need to be handled with care but there are a few nice payoffs First, these charts force us and our end users to reflect on how time periods can affect Sortino to extremes. Be skeptical if someone reports a fantastic 6-month Sortino. Second, as an exploratory device, the rolling ratios highligh time periods deserving of more investigation.  Third, with Sortino (and Sharpe) Ratios, there's a temptation to look at the final number for a portfolio's life and judge it 'good' or 'bad'. These rolling visualizations can help reframe the analysis and look at how the portfolio behaved in different economic and market regimes.
+Let's compare to the rolling S&P500 Sortino. 
+
+```{r}
+market_sortino_roll_24_xts <- rollapply(market_returns_xts, 24, 
+                           function(x) SortinoRatio(x, MAR = MAR))
+  
+
+highchart(type = "stock") %>%
+  hc_title(text = "Rolling sharpe") %>%
+  hc_add_series(portfolio_sortino_roll_24_xts, name = "Portfolio", color = "cornflowerblue") %>%
+  hc_add_series(market_sortino_roll_24_xts, name = "SP500", color = "green") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+```
 
 
+Rolling Sortinos need to be handled with care but there are a few nice payoffs. First, these charts force us and our end users to reflect on how time periods can affect Sortino to extremes. Be skeptical if someone reports a fantastic 6-month Sortino. Second, as an exploratory device, the rolling ratios highligh time periods deserving of more investigation.  Third, with Sortino (and Sharpe) Ratios, there's a temptation to look at the final number for a portfolio's life and judge it 'good' or 'bad'. These rolling visualizations can help reframe the analysis and look at how the portfolio behaved in different economic and market regimes.
+
+
+### On to Shiny
+
+First off, have a look at the Shiny App and notice how similar it is to the Sharpe Ratio app in structure. We just saw how the calculations are different, but from a Shiny perspective, the only difference is that the end user chooses a MAR instead of a risk-free rate. 
+
+```{r, eval = FALSE}
+
+fluidRow(
+  column(5,
+  numericInput("mar", "MAR%", .8, min = 0, max = 3, step = .01)),
+  column(5,
+  numericInput("window", "Window", 6, min = 2, max = 24, step = 2))
+)
+```
+
+Note that we ask for a MAR *percent*. Thus, when calculating the reactive, we divide by 100. 
+
+```{r, eval = FALSE}
+mar <- eventReactive(input$go, {input$mar/100})
+```
+
+Why do that? No substantive reason - perhaps it's more intuitive to the user.
+
+On that same theme, I removed the value boxes so the user doesn't get to see the overall Sortino Ratio for the portfolio and the market. Why did I do that? 
+
+Let's talk testing and the user experience here. 

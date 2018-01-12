@@ -4,16 +4,17 @@ runtime: shiny
 output:
   flexdashboard::flex_dashboard:
     orientation: rows
+    source_code: embed
 ---
 
 
 ```{r setup, message = FALSE}
 library(flexdashboard)
-library(tidyverse)
 library(highcharter)
 library(tidyquant)
 library(timetk)
 library(shiny)
+library(scales)
 ```
 
 Sidebar {.sidebar}
@@ -59,16 +60,19 @@ fluidRow(
 
 fluidRow(
   column(7,
-  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd")),
+  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd")))
+
+fluidRow(
   column(5,
-  numericInput("rfr", "RFR", .008, min = 0, max = 1, step = .001)),
+  numericInput("rfr", "RFR", .0003, min = 0, max = 1, step = .0002)),
   column(4,
-  numericInput("window", "Window", 24, min = 3, max = 24, step = 2))
+  numericInput("window", "Window", 6, min = 3, max = 24, step = 2))
 )
 
 actionButton("go", "Submit")
+```
 
-# The prices object will hold our daily price data.
+```{r}
 prices <- eventReactive(input$go, {
   
   symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
@@ -82,11 +86,20 @@ prices <- eventReactive(input$go, {
 
 rfr <- eventReactive(input$go, {input$rfr})
 
-rolling_sharpe <- eventReactive(input$go, {
+window <- eventReactive(input$go, {input$window})
+
+rolling_portfolio_sharpe_xts <- eventReactive(input$go, {
+  
+  validate(need(input$w1 + input$w2 + input$w3 + input$w4 + input$w5 == 100, 
+                "The portfolio weights must sum to 100%!"))
+  
   prices <- prices()
+  
   w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
   rfr <- rfr()
-  window <- input$window
+  
+  window <- window()
 
 prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
 asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
@@ -94,37 +107,53 @@ asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
 portfolio_returns_xts_rebalanced_monthly <- Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "months")
 
 rolling_sharpe <- 
-  apply.rolling(portfolio_returns_xts_rebalanced_monthly, window, 
-                           fun =  "SharpeRatio", Rf = rfr)
+  rollapply(portfolio_returns_xts_rebalanced_monthly, window, 
+                           function(x) SharpeRatio(x, Rf = rfr, FUN = "StdDev"))
 })
 
-sharpe_byhand <- eventReactive(input$go, {
+portfolio_sharpe <- eventReactive(input$go, {
+  
+  validate(need(input$w1 + input$w2 + input$w3 + input$w4 + input$w5 == 100, "The portfolio weights must sum to 100%!"))
   
   prices <- prices()
   w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
   
-  asset_returns_long <- 
+  rfr <- rfr()
+  
+  portfolio_returns_sharpe <- 
       prices %>% 
       to.monthly(indexAt = "last", OHLC = FALSE) %>% 
       tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
       gather(asset, returns, -date) %>% 
       group_by(asset) %>%  
-      mutate(returns = (log(returns) - log(lag(returns))))
-
-portfolio_returns_tidy <- 
-  asset_returns_long %>% 
-  tq_portfolio(assets_col = asset, 
+      mutate(returns = (log(returns) - log(lag(returns)))) %>% 
+      tq_portfolio(assets_col = asset, 
                returns_col = returns, 
                weights = w,
-               col_rename = "returns")
-rfr <- rfr()
-sharpe_byhand <- 
-  portfolio_returns_tidy %>% 
-  slice(-1) %>%
-  mutate(ratio = mean(returns - rfr)/sd(returns - rfr),
+               col_rename = "returns") %>% 
+      slice(-1) %>%
+      mutate(ratio = mean(returns - rfr)/sd(returns - rfr),
          returns_below_rfr = ifelse(returns < rfr, returns, NA),
          returns_above_rfr = ifelse(returns > rfr, returns, NA))
 
+})
+
+
+market_returns_sharpe <- eventReactive(input$go, {
+  rfr <- rfr()
+  
+  market_returns_sharpe <- 
+    getSymbols("SPY", src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Ad(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`("SPY") %>% 
+    to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+    mutate(returns = (log(SPY) - log(lag(SPY)))) %>% 
+    na.omit() %>% 
+    mutate(market_sharpe = mean(returns - rfr)/sd(returns - rfr))
+  
 })
 
 ```
@@ -140,9 +169,24 @@ Row {data-height=600}
 ```{r}
 renderHighchart({
   
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, rfr, rolling window and start date and click submit."))
+  
+  market_returns_xts <- 
+    market_returns_sharpe() %>% 
+    select(date, returns) %>% 
+    tk_xts(date_var = date)
+  
+  rfr <- rfr()
+  window <- window()
+  
+  rolling_market_sharpe_xts <- 
+    rollapply(market_returns_xts, window(), 
+                           function(x) SharpeRatio(x, Rf = rfr, FUN = "StdDev"))
+  
   highchart(type = "stock") %>%
   hc_title(text = "Rolling Sharpe") %>%
-  hc_add_series(rolling_sharpe(), name = "Sharpe", color = "cornflowerblue") %>%
+  hc_add_series(rolling_portfolio_sharpe_xts(), name = "Portfolio", color = "cornflowerblue") %>%
+  hc_add_series(rolling_market_sharpe_xts, name = "Market", color = "green") %>%
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE) 
 
@@ -151,29 +195,32 @@ renderHighchart({
 ```
 
 
-Row {data-height=200}
+Row {data-height=190}
 -----------------------------------------------------------------------
 
 ### The Sharpe Ratio of Your Portfolio
 
 ```{r}
-valueBoxOutput("approvalBox1")
-output$approvalBox1<-renderValueBox({
+renderValueBox({
   
-  sharpe_byhand <- sharpe_byhand() %>% summarise(ratio = round(mean(ratio), 4))
+  portfolio_sharpe <- portfolio_sharpe() %>% summarise(ratio = round(mean(ratio), 4))
   
-  ratio <- sharpe_byhand$ratio  
   
-  valueBox(value = sharpe_byhand, icon = "fa-line-chart", color = "primary")
+  valueBox(value = tags$p(portfolio_sharpe, style = "font-size: 70%;"), color = "primary")
 })
+
 ```
 
 ### Sharpe Ratio of S&P500 in same time period
 
 ```{r}
 renderValueBox({
-  valueBox(value = 5, icon = "fa-line-chart", color = "primary")
+  
+  market_sharpe <- market_returns_sharpe() %>% summarise(ratio = round(mean(market_sharpe), 4))
+  
+  valueBox(value = tags$p(market_sharpe, style = "font-size: 70%;"), color = "primary")
 })
+
 ```
 
 Row {.tabset .tabset-fade}
@@ -183,10 +230,11 @@ Row {.tabset .tabset-fade}
 
 ```{r, message = FALSE}
 renderPlot({
+  validate(need(input$go != 0, "Please choose your portfolio assets, weights, rfr, rolling window and start date and click submit."))
   rfr <- rfr()
-  sharpe_byhand <- sharpe_byhand()
+  portfolio_sharpe <- portfolio_sharpe()
   
-  ggplot(data = sharpe_byhand, aes(x = date)) +
+  ggplot(data = portfolio_sharpe, aes(x = date)) +
   geom_point(aes(y = returns_below_rfr), colour = "red") +
   geom_point(aes(y = returns_above_rfr), colour = "green") + 
   geom_vline(xintercept = as.numeric(as.Date("2016-11-30")), color = "blue") +
@@ -204,9 +252,9 @@ renderPlot({
 ```{r}
 renderPlot({
   rfr <- rfr()
-  sharpe_byhand <- sharpe_byhand()
+  portfolio_sharpe <- portfolio_sharpe()
   
-  sharpe_byhand %>% 
+  portfolio_sharpe %>% 
     ggplot(aes(x = returns)) +
     geom_histogram(alpha = 0.25, binwidth = .01, fill = "cornflowerblue") +
     geom_vline(xintercept = rfr, color = "green") +
@@ -215,10 +263,3 @@ renderPlot({
              angle = 90, alpha = .5, vjust =  1)
 })
 ```
-
-
-
-
-
-
-

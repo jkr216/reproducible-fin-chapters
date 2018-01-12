@@ -1,0 +1,103 @@
+---
+title: "Intro Outline"
+output: html_notebook
+---
+
+## What is RF and why does it matter?
+
+Why do robo-advisors like Betterment and Wealthfront cost a fraction of the price of traditional money managers? Why can one credit agency rate debt in 30 days but it takes another 6 months? How is Blackrock doing away with human stock-picking in favor of machine learning? Those firms have embraced the principles of modern data science and they can do things faster, cheaper and smarter. Their advantage is growing every day and many financial institutions are frantically working to be the leader, or to catch up to the leader, in this brave new world.
+
+*Reproducible Finance* explains how to build a great data science practice in the world of finance and compete in this modern financial jungle. The core hypothesis is that the world of finance is changing, embracing data science and technology, but there's no road map for how to do that. 
+
+# 4 pillars
+Beyond the theory of RF, what are the building blocks?
+
+It consists of 4 pillars: technology, people, culture and alpha. For our purposes, technology equals R code, functions, data visualizations and Shiny applications. We are going to painstakingly cover the R code pillar in the pages to come but before we do that, let me spend a few paragraphs on those other three pillars.
+
+People are the second pillar. Code doesn't write itself, data doesn't clean itself, and hypotheses definitely don't test themselves.  For all the talk about machine learning and artificial intelligence, they still depend on algorithms conceived of and written by people. People need to be hired, trained, motivated, and, very importantly in today's world, they want to be in an environment that is welcoming to modern data science. 
+
+That welcoming environment is part of the third pillar: culture. It's not one of my favorite buzz words but financial institutions have a distinctive culture that is typically less conducive to reproducibility. 
+
+A culture of reproducibility is one in which [,,,,,,,,,,,,,]. 
+
+The opposite of this would be the culture of the Black Box Genius, what I call the BBG. In the BBG culture, the best ideas are kept secret, only one person understands them, and that one person can hold the company ransom.  Any attempt to understand the secret ideas is an attempt to assassinate the lone genius who created the secret ideas. I'm exaggerating but it's not hard to understand where this comes from: if the best ideas get shared, they seem to lose their value. 
+
+It's the expecation of reproducibility and the recognition that repro'ing someone's work is not attacking that someone, in fact, it's a way of legitimizing it. For example, if there's a policy: nothing goes into production, or gets put in front of a client, LP or Pm unless it has been repro'd or stress tested, then everyone knows their work isn't even being considered for the big time unless it is being repro'd. In that system, reproducing work is a stamp of approval, not a questioning. And, it makes so that lack of reproducibility has a built-in objective cost. A team member can keep work un-reproudicibile, but that work will never get to production. 
+
+The fourth pillar is alpha, or if we prefer, revenue. If a practice, habit, issue, etc does not generate alpha or revenue for a financial institution above the alternative BBG method, it's tough to survive. For our purposes, that means that if the Black Box Genius and his team consistently generate higher *long-term* returns than our team, the days of reproducibility may be numbered. Here are where the reproducible team has the advantage: 
+- attracting the best thinkers
+- long term strategies - no one can build off the BBG.
+- in RF, each strategy is a foundation on which new strategies can be built. The output of the team grows exponentially as each person who reuses or reproduces a model has the opportunity to improve it by 1%. 
+- long term in that will survive if the team changes over time
+- open to newer technologies. The BBG will torpedo new tech - which means the firm will wake up, hear that BBG has retired and moved to a tax-haven, then discover its technology stack is 3 years behind the times.
+- Oh, and the BBG's algorithms can't be understood by anyone else. Have they been updated recently? Stress tested? Should we take them out of production? 
+
+
+
+## 3 Universes
+
+This book focuses on three general universes or paradigms for finance with R. 
+
+The first universe is what I call the `xts` world. `xts` is both a package anda type of object. `xts` stands for extensible time series. Most of our work in this book will be with time series, and indeed most financial work involves time series.  An `xts` object holds a time series, meaning it holds the observations and the times at which they occurred. An interesting feature of an `xts` object is that it holds dates in an `index` column.  In fact that index column is considered column number zero, meaning it's not really a column at all. If we have an object call `financial_data` and want to acccess the dates, we use `index(financial_data)`.  
+
+In the `xts` world, there are two crucial packages that we will use: `quantmod` and `PerformanceAnalytics`. `quantmod` is how we will access the internet and pull in pricing data. That data will arrive to us formatted as an `xts` object. 
+
+`PerformanceAnalytics`, as the name implies, has loads of useful functions for analyzing portfolio returns in an `xts` object, such as `StdDev()`, `SharpeRatio()`, `CAPM.Beta()`. We will make use of this package in virtually all of the chapters. 
+
+To learn more, have a look at the documentation at the URL below.
+cran.r-project.org/web/packages/PerformanceAnalytics/PerformanceAnalytics.pdf
+
+
+The second universe is what I call the tidy world, sometimes called the 'tidyverse.' The tidyverse is a collection of R packages for doing data science in a certain way. It is not specific to financial services and is not purpose built for time series analysis.  
+
+Within the tidyverse, we will make heavy use of the `dplyr` package for data wrangling, transformation and organizing. `dplyr` does not have built-in functions for our statistical caclulations, but it does allow us to write our own functions or apply some other package's functions to our data. 
+
+In this world, our data will be in a data frame or, equivalently, a `tibble`. Throughout this book, I will use those two words interchangeably: data frame == tibble in this book.
+
+So, what does it mean to be 'tidy'? A 'tidy' data frame is one that has a column for each of its variables.  Thus, there is no date index. There is a column that we will label `date`.  If the `financial_data` object were a data frame, we access it's date with `financial_data$date` or `financial_data %>% select(date)`.  We will cover how a 'tidy' data frame is different from a non-tidy data frame in the first section.
+
+There is a lot to learn about the tidyverse and I highly recommend a look at
+https://www.tidyverse.org/ or Garret/Hadley's book *R For Data Science* (available free at ds.had.co.nz). In fact, it's a good idea to open those URLs in a tab whilst reading this book, or skimming them beforehand.
+
+
+The third universe is that of tidyquant or what I will sometimes call tq, which includes the `tidyquant`, `timetk` and `tibbletime` packages.  This universe takes a lot of the best features of `xts`, `PerformanceAnalytics` and the tidyverse and lets them play well together. For example, tidyquant allows us to apply a function from `PerformanceAnalytics` to a tidy data frame, without having to convert it to an `xts` object. To learn more, check out: www.business-science.io/r-packages.html. 
+
+
+Those three universes will provide the structure to our code as we work through calculations. As a result, each chapter or substantive task will follow a similar pattern: solve it via `xts`, solve it via `tidyverse`, solve it via `tidyquant` and verify that the results are the same. In this way, we will become familiar and even facile in thinking about data in different formats and using different paradigms. We will even cover one example in which it's necessary to combine all three universes to solve a challenge.  
+
+In reality, on any given team of quants or data scientists, there will be variation in preference or comfort for the different paradigms, possibly on a project by project basis. That might sound like a recipe for disaster. Why choose a paradigm and make sure the team uses it? This relates back our human pillar and our culture pillar. The best data science teams are comprised of the best data scientists, who are then allowed to solve challenges how they prefer. It's a culture of openness towards creative problem solving, but it's also combined with an emphasis on reproducibility. Choose the paradigm that suits best, but make sure the work is done in such a way that it can understood and reproduced by the broader team. 
+
+To take a medical analogy, if we were building a team of the best surgeons in the world, we would hire the best and brightest and then make sure they had whatever set of scalpels they needed for their procedures. We wouldn't hire the best and the brightest, and then announce that everyone has to use the same set of scalpels because that's how IT mandates! 
+
+This also leads to a culture that encourages our team to work creatively, but with the knowledge that other people might work in a different coding paradigm. That makes it imperative to write clear and readable code that can be understood by an R coder from a different universe, so to speak.
+
+## Data Visualization
+
+When the substance is done and it's time visualize, object structure will again play a a role. We will generally chart `xts` objects using the `highcharter` package and tidy/tidyquant objects using `ggplot`, which itself is part of the tidyverse.  As might become apparent, if your team or organization develop an aesthetic preference for certain visualization practices, it can influence which of the object paradigms work best for your code flow. 
+
+It's worth emphasizing that data visualization is a large part of and a crucial skill discussed in this book.  Data visualization is where we translate numbers into shapes and colors and we do that so that humans who don't want to dig into our data frames can still grasp our work and derive value.  That's important because this is how our quiet quantitative toiling becomes a transcendent revenue- or strategy-driving product. Even if we just plan to implement algorithms and never share our work outside of our own firm, unless our team have full authority to build and productionize algorithms without signoff from a non-quant, the ability to explain and communicate is hugely important. 
+
+And of course to the extent that clients, customers, partners, partners, bosses, portfolio managers and anyone else want actionable insights from us, data visualizations will almost certainly be more prominent in the discussion than the nitty gritty of code, data or even statistics. I will emphasize data visualization throughout the book and implore you: spend as much or more time on data visualizations as you do on the rest of quantitative finance!   
+
+## Shiny Applications
+Each of our chapters will conclude with the building of a Shiny application, so that by book's end, you will have the tools to build a suite of Shiny apps and dashboards for portfolio analysis. What is Shiny? 
+
+Shiny is a package that wraps R code into interactive web applications so us R coders don't have to learn HTML, CSS or Javascript. It was created by Joe Cheng, the CTO of RStudio and you can learn more about Shiny at shiny.rstudio.com. 
+
+Shiny applications are extremely useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio or how volatility has changed over time, but he or she might not want to see the code, data and functions used for the calculation. Or, another PM might love the work we did on Portfolio 1, and have a desire to apply to Portfolios 2-100. Shiny allows that PM to change input parameters on the fly and ad infinitum.  
+
+In terms of building Shiny apps, we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. There's no better way to learn than to build! Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to become an expert in Shiny, please include a visit to shiny.rstudio.com.    
+
+Shiny applications are web-based and can't be viewed in a book! You will need to head to this book's website www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their full source code. It's not necessary to go see them live on the internet, but it will be a lot easier to envision what the code is doing. 
+
+## What We Won't Cover
+
+The goal of this book is to demonstrate several, reproducible workflows for calculating and visualizing portfolio data and statistics. Beyond introductions, we will not delve deep into the math that underlies our calculations or delve deep into the underpinnings portfolio theory. That stuff is important and highly recommended (and fascinating!) but it's not the focus of this book. For readers who want to explore those concepts, I recommend Eric Zivot's *Introduction to Computational Finance and Financial Econometrics with R* (see if you can port his code/concepts over to one of our methods) and, more generally, the iconic Bodie Kane and Markus *Investments*.  If you're a primary source type of person, Harry Markowitz's original 1959 monograph on mean-variance optimization is still a thrilling read.
+
+## Building Packages and Using Github: More of What We Won't Cover
+
+This book is also not going to cover two important pieces of the technology stack: building packages and version control with github. 
+
+`PerformanceAnalytics`, `dplyr`, `tidyquant` - they're all packages and that means it easy for us to access their function. Saving our work and data into R packages is a great way to share them for reuse and reproduction across our team. Packages are a huge part of R and the R ecosystem.  If you work at a financial institution, the best practice is definitely to save your functions and models into private packages in private repositories for use by your team.  The reason I am not going to cover package building is that Hadley has already covered it in his book *R Packages* (available here http://r-pkgs.had.co.nz/).   
+
+Version control with github (or another technology) is also hugely important. It's how we and our team keep track of changes to our code, models, data, packages, everything. Again, this topic has been covered very well by Jenny Bryan in here book *Happy Git with R* (http://happygitwithr.com/)

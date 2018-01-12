@@ -9,17 +9,30 @@ What is reproducible finance?
 
 *Reproducible Finance* is a philosophy for how to do build a data science practice in the world of finance. The world of finance is changing, embracing data science and technology, but there's no road map for how to do that.
 
-R code is important, and the bulk of this book is dedicated to writing that R code. However, the reason this book is not called *R Code in Finance* is that I will frequently emphasize reproducibility, reusability, lean processes, experimentation and other best practices that relate to but go beyond writing code.
 
-By book's end, an analyst or aspiring analyst at a bank or hedge fund will have the technical foundation to begin building a data science practice that delivers an advantage over slower moving firms. Readers will gain an edge on the competition through the use of data science.
+This book is about doing data science the right way in the financial world. The word "reproducible" encapsulates what I think that means.
 
-Reproducible finance is doing data science the right way in the financial world. 
+R code is important, and the bulk of this book is dedicated to writing that R code. However, the reason this book is not called *R Code in Finance* is that I will frequently emphasize reproducibility, reusability and other best practices that relate to but go beyond writing code. In fact, we will sometimes make coding decisions for non-coding reasons. 
 
-It consists of 4 pillars. 
 
-Technology is the 1st pillar and that will be the primary focus of this book. By technology, I mean the R code and algorithms that are used to run tests and calculations, build visualizations, and assist humans in making decisions.  Are there other technologies besides R code? Yes, but this book is not about those.
+It consists of 4 pillars: technology, people, culture and alpha. The majority of this book covers the technology pillar, the first pillar, and the writing of R code in a way that is readable, reproducible, conducive. We are going to write a lot of code in the coming pages but before we do that, let me spend a few paragraphs on those other three pillars.
 
-Humans are the second pillar. By humans, I primarily mean the team, including the leaders and recruiters of the team, that are using the technology to gather and clean data, build models, test hypotheses and deliver actionable results to the rest of a financial instiution.  
+Humans are the second pillar. By humans, I  mean the team, including the leaders, managers and recruiters of the team, that are using the technology to gather and clean data, build models, test hypotheses and deliver actionable results to the rest of a financial instiution.  
+
+There's another important set of humans and that set is the end consumers of our work. We will mention them frequently when building our Shiny applications because, similar to any other piece of media, a Shiny app that is not used by people has no value, regardless of how ingenius the R code underlying it. 
+
+The third pillar is culture, not one of my favorite buzz words but financial institutions have a distinctive culture and it's not one typically conducive to reproducibility. 
+
+The fourth pillar is alpha, or if we prefer, revenue. If a practice, habit, issue, etc does not generate alpha or revenue for a financial institution above the alternative, it's tough to survive. For our purposes, that means that if the Black Box Genius and his team consistently generate higher *long-term* returns than our team, the days of reproducibility may be numbered. I will try to highlight where the repro team has the advantage (hint: it's everywhere!). 
+
+As we think about those other pillars, one quite prominent way in which the code is affected is that we will solve the most of our challenges using at least three different paradigms. Those are xts and heavy use of the Performance Analytics package, tidyverse using dyplyr and built-in functions and, lastly, tidyquant built-in packages. 
+
+
+For example, when we calculate the standard deviation of a portfolio, we code through those three paradigms and will arrive at the same answer each time. I am doing it for pedagogical purposes in case one of those flows is preferred for certain readers and to show how a culture of reproducibility leads to different expectations and code foundations
+
+Can we force a paradigm? yes, but why? Hire the best surgeons in the world and get them good scalpels. When they need to collaborate, that's where the right leadership comes in...
+
+If we emphasize repro, and ask it of others, we need to be prepared for less efficient code, potentially and we need to be fluent in different paradigms. We dont' want to emphasize repro but also force people into a way of doing things. The reproducibility is hard, and it needs to be coupled with a culture that emphasizes it (which is a bit constrictive - repro!) and combines it with freedom (repro, but we're open to `xts`, tidyverse, tidyquant, or hand-written functions)
 
 
 Why is reproducible finance important? 
@@ -32,18 +45,43 @@ What is covered in this book?
 - redundancy
 - shiny
 
-A word on how things are weighted. You might notice a heavy emphasis on step 1, what probably seems the simplest step. Afterall, why waste our valuable time thinking about importing data, then wrangling it. Why not zip through that as fast possible and get to our risk management or portfolio construction as quickly as possible! 
+A word on how things are weighted. You might notice a heavy emphasis on step 1, what probably seems the simplest step. Afterall, why waste our valuable time thinking about importing data, then transforming it. Why not zip through that as fast possible and get to our risk management or portfolio construction as quickly as possible! That's why quants get paid the big bucks, indeed. But if we skip to the risk and portfolio theory and modeling, it's like an athlete skipping his pushups. They're not glamorous, and no one gets paid to do pushups, but when the going gets rough, you better have done those pushups! It's the same with data import/wrangling. 
+
+
 1) If our team selves can't get the data into the right format, or see it in its raw state and how we go wrangled into our usable data, they can't evaluate our work or reproduce it. 
 2) that time investement will pay off and make us more efficeient in the future in a few ways. first, it will ensure we have 'grokked' our data. love it or hate it, if you painstakingly document and make explicit your steps fromd data import to wrangle to transformation, you will know your data better than anyone else on the planet. And that raises the probability that your team will unearth creative insights or algorithms. Two, when you do unearth those algorithms, coding them up will be much faster if you know your data structures backwards and forwards. If that stuff is second nature, your team can spend more time on the alpha generating stuff. 
 
 What is not covered in this book? 
 
-The goal of this book is to demonstrate several, reproducible methods for calculating and visualizing the substance. We will not delve into the math that underlies the substance or delve deep into the portfolio theory. That stuff is important and highly recommended (and fascinating!). For readers who want to explore those concepts, I recommend Eric Zivot's "Financial Analytics with R" (see if you can port his code over to one of our methods). 
+The goal of this book is to demonstrate several, reproducible methods for calculating and visualizing the substance. Beyond introductions, we will not delve into the math that underlies our calculations or delve deep into the underpinnings portfolio theory. That stuff is important and highly recommended (and fascinating!). For readers who want to explore those concepts, I recommend Eric Zivot's "Financial Analytics with R" (see if you can port his code over to one of our methods) and Harry Markowitz's original 1959 book on mean-variance optimization. 
+
+We also won't delve deep into the R programming language. Garret Grolemund and Hadley's Wickham's "R for Data Science" is ~~the Bible~~ a phenomenal source for that material.
+
+On Structure
+Each chapter has a near identical structure. (So much so that you might get bored and find it very very easy to follow the logic by the end of this book. If that occurs, our work here is done). 
+We will start with the intro, then the by-hand, then to the different paradigms to make extra sure we have writtend clear code. Then on to visualization? 
+
+## The role of vis in this book and in DS
 
 
-We also won't delve deep into the R programming language. Garret Grolemund and Hadley's Wickham's "R for Data Science" is ~~the Bible~~ a phenomenol source for that material.
+There are different worlds and paradigms. XTS, Tidy using dplyr, Tidy using tidyquant. For most of our tasks, we will go through each of those worlds. Why?
 
-Shiny? 
+What is xts? 
+
+What is tidyverse? 
+
+What is tidyquant? 
+
+Understanding these, the differences and advantages of each one is so important as the team grows, and more people do data science in finance with R. I am not going to opine on which is better. I use each of them extensively and calculations, visualizations, Shiny apps so the reader can get a grasp for them and make the decision for him/herself. 
+
+My take is the surgeion thing
+
+1) to learn more
+2) to expand the toolkit
+3) to make sure our colleagues and ourselves have grokked this stuff. 
+4) for reproducibility and reusability: what if a team member wants a tool, or a new package comes out and w shift, or they love a Shiny app and want to dig deeper, or use it as a launching pont
+
+Each chapter will conclude with a Shiny app or even two.  
 Shiny is an R package that wraps R code into an interactive web application.   
 
 Shiny applications are extremely useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio, but he or she might not want to see the code, data and functions used for the calculation.  We will  embed our code and make explicit where our data came from, in case an end user does want to dig in or in case a colleague (including our future selves) want to reproduce/reuse our work. But we will also give consideration to the aesthetics and usability of our applications.
@@ -52,4 +90,4 @@ This book is not a guide on building Shiny apps but we will cover the basics and
 
 That said, by the end of this book, we will have covered enough financial Shiny apps for the reader to be an intermediate app developer in the realm of portfolio management. Because our apps will emphasize reproducibility, you can take the foundation here and use it for more complex apps.
 
-Shiny applications are web-based so you will need to head to www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their source code. 
+Shiny applications are web-based so you will need to head to www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their source code. It's not necessary to go see them live on the internet, but it will make it a lot easier to envision what the code is doing. 

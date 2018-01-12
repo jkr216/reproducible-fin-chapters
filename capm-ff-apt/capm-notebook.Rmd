@@ -18,48 +18,85 @@ library(scales)
 
 knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 
-load("~/reproducible-fin-chapters/book-data.Rdata")
+load("~/reproducible-fin-chapters/returns/book-data.Rdata")
 ```
 
-In this chapter, we will take a brief look at the Capital Asset Pricing Model, or CAPM.  
+Let's take a brief look at the Capital Asset Pricing Model, or CAPM.  
 
-By way of extraordinarily brief background, CAPM 
+By way of extraordinarily brief background, CAPM is a model, created by William Sharpe, that estimates the return of an asset based on the return of the market and the asset's linear relationship to the return of the market. That linear relationship is the stock's beta coefficient, or just good'ol beta. 
 
-We are going to focus on calculating the market beta of our portfolio and that number will tell us about our portfolio's relationship to the market return.  
+CAPM was introduced back in 1964, garnered a Nobel for its creator and, like many ephocally important theories, has been widely used, updated, criticized, debunked, revived, re-debunked, etc. Indeed, Fama and French have written that CAPM "is the centerpiece of MBA investment courses. Indeed, it is often the only asset pricing model taught in these courses...[u]nfortunately, the empirical record of the model is poor."[^1]  
 
-We need to make a choice about which asset to use as a proxy for the market return and we will go with the SPY ETF, effectively treating the S&P500 as our market. That's going to make our calculations substantively uninteresting because (1) SPY is 25% of our portfolio and (2) we have chosen assets and a time period in which correlations with SPY have generally been high. With those caveats in mind, feel free to choose a different asset for the market return and try to reproduce this work, or construct a different portfolio that does not include SPY.  
+[^1]: The Capital Asset Pricing Model: Theory and Evidence
+Eugene F. Fama and Kenneth R. French, The Capital Asset Pricing Model: Theory and Evidence, The Journal of Economic Perspectives, Vol. 18, No. 3 (Summer, 2004), pp. 25-46
 
-Let's calculate our market return by extracting SPY from our `assets_returns_long` object.
+With that, we will forge ahead with our analysis because calculating CAPM can serve as a nice template for more complex mdoels in a team's work and sometimes it's a good idea to start with a simple model, even if it hasn't stood up to empirical rigor.
+
+We are going to focus on one particular aspect of CAPM: beta.  Beta, as we noted above, is the beta coefficient of an asset that results from regressing the returns of that asset on market returns.  It captures the linear relationsip between the asset/portfolio and the market. For our purposes, it's a good vehicle for exploring a reproducible flow for modeling or regressing our portfolio returns on the market returns. Even if your team dislikes CAPM in favor of more nuanced models, this workflow can serve as a good base for the building of those more complex models.
+
+Let's get to it. 
+
+Our first step is to make a choice about which asset to use as a proxy for the market return and we will go with the SPY ETF, effectively treating the S&P500 as the market. That's going to make our calculations substantively uninteresting because (1) SPY is 25% of our portfolio and (2) we have chosen assets and a time period (2013 - 2017) in which correlations with SPY have been high. It will offer one benefit in the way of a sanity check, which I'll note below.  With those caveats in mind, feel free to choose a different asset for the market return and try to reproduce this work, or construct a different portfolio that does not include SPY.  
+
+Let's calculate our market return for SPY and save it as `market_return_xts`.
 
 ```{r}
-market_return <- asset_returns_long %>% 
-  na.omit() %>% 
-  filter(asset == "SPY") %>% 
-  select(returns)
+
+market_returns_xts <- 
+    getSymbols("SPY", src = 'yahoo', from = "2013-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Ad(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`("SPY") %>% 
+    to.monthly(indexAt = "last", OHLC = FALSE)
 ```
 
-Now there are several ways to calculate portfolio beta but first let's have a look at the equation.
+We will also want a data frame object of market returns.
+
+```{r}
+
+market_returns_tidy <-
+  market_returns_xts %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+    mutate(returns = (log(SPY) - log(lag(SPY)))) %>% 
+    na.omit() %>%
+    select(date, returns)
+
+head(market_returns_tidy)
+
+```
+We have a `market_return` object. Let's make sure it's periodicity aligns perfectly with our portfolio returns periodicity
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>% mutate(market_returns = market_returns_tidy$returns) %>% head()
+```
+
+Note that if the periodicities did not align, `mutate()` would have thrown an error in the code chunk above.
+
+There are several paths via R code to calculate portfolio beta but first let's have a look at the equation.
 
 $${\beta}_{portfolio} = cov(R_p, R_m)/\sigma_m $$
 
 Portfolio beta is equal to the covariance of the portfolio returns and market returns, divided by the variance of market returns.
 
-We can calculate the numerator, or covariance of portfolio and market returns, with `cov(portfolio_returns_xts_rebalanced_monthly, market_return$returns)` and the denominator with
+We can calculate the numerator, or covariance of portfolio and market returns, with `cov(portfolio_returns_xts_rebalanced_monthly, market_returns_tidy$returns)` and the denominator with
 `var(market_return$returns)`. 
 
 Our portfolio beta is equal to:
 
 ```{r}
-cov(portfolio_returns_xts_rebalanced_monthly, market_return$returns)/var(market_return$returns)
+cov(portfolio_returns_xts_rebalanced_monthly,market_returns_tidy$returns)/var(market_returns_tidy$returns)
 ```
 
-That beta is quite near to 1 as we were expecting. 
+That beta is quite near to 1 as we were expecting - afterall, SPY i a big part of this portfolio. 
 
 We can also calculate portfolio beta by finding the beta of each of our assets and then multiplying by asset weights. That is, another equation for portfolio beta is the weighted sum of the asset betas:
 
 $${\beta}_{portfolio} ={\sum_{i=1}^n}W _i~{\beta}_i $$
 
-To use that method, we first find the beta for each of our assets and this gives us an opportunity to introduce a code flow for running regression analysis.  We want to regress each of our individual asset returns on the market return.  We could do that for asset 1 with `lm(asset_return_1 ~ market_return$returns)`, and then again for asset 2 with `lm(asset_return_2 ~ market_return$returns)` etc for all 5 of our assets.  But if we had a 50 asset portfolio, that would be impractical. Instead let's write a code flow and use `map()` to regress all of our assets and calculate betas with one call. 
+To use that method with R, we first find the beta for each of our assets and this gives us an opportunity to introduce a code flow for running regression analysis.  
+
+We need to regress each of our individual asset returns on the market return.  We could do that for asset 1 with `lm(asset_return_1 ~ market_returns_tidy$returns)`, and then again for asset 2 with `lm(asset_return_2 ~ market_returns_tidy$returns)` etc for all 5 of our assets.  But if we had a 50 asset portfolio, that would be impractical. Instead let's write a code flow and use `map()` to regress all of our assets and calculate betas with one call. 
 
 We will start with our `asset_returns_long` tidy data frame and will then run `nest(-asset)`.
 
@@ -74,35 +111,34 @@ beta_assets
 That `nest(-asset)` changed our data frame so that there are two columns: one called `asset` that holds our asset name and one called `data` that holds a list of returns for each asset. We have now 'nested' a list of returns within a column.
 
 Now we can use `map()` to apply a function to each of those nested lists and store the results in a new column. `mutate()` is how we create a new column. The whole piped command is
-`mutate(model = map(data, ~ lm(returns ~ market_return$returns, data = .))) `
+`mutate(model = map(data, ~ lm(returns ~ market_returns_tidy$returns, data = .))) `
 
 ```{r}
 beta_assets <- 
   asset_returns_long %>% 
   nest(-asset) %>% 
-  mutate(model = map(data, ~ lm(returns ~ market_return$returns, data = .))) 
+  mutate(model = map(data, ~ lm(returns ~ market_returns_tidy$returns, data = .))) 
 
 beta_assets
 ```
 
-We now have 3 columns: `asset` which we had before, `data` which we had before, and `model` which we just added. The model column holds the results of the regression `lm(returns ~ market_return$returns, data = .)` that we ran for each of our assets. Those results are a beta and an intercept.
+We now have 3 columns: `asset` which we had before, `data` which we had before, and `model` which we just added. The `model` column holds the results of the regression `lm(returns ~ market_returns_tidy$returns, data = .)` that we ran for each of our assets. Those results are a beta and an intercept for each of our assets. 
 
 ```{r}
 beta_assets$model
 ```
 
-We have our beta for each asset but not in a great format for presenation or even readabiity. 
+We have our beta for each asset but not in a great format for presenation to others or even readability by ourselves. 
 
 Let's tidy up our results with the `tidy()` function from the `broom` package. We want to apply that function to our model column and will use the `mutate()` and `map()` combination again. The complete call is to
-`mutate(model = map(model, tidy)) %>%`
+`mutate(model = map(model, tidy))`.
 
-I don't like having nested lists in my final results so we will `unnest()` our `model` column.
 
 ```{r}
 beta_assets <- 
   asset_returns_long %>% 
   nest(-asset) %>% 
-  mutate(model = map(data, ~ lm(returns ~ market_return$returns, data = .))) %>%
+  mutate(model = map(data, ~ lm(returns ~ market_returns_tidy$returns, data = .))) %>%
   mutate(model = map(model, tidy))
 
 beta_assets
@@ -120,22 +156,22 @@ Still, I don't like to end up with nested data frames, so let's `unnest()` that 
 beta_assets <- 
   asset_returns_long %>% 
   nest(-asset) %>% 
-  mutate(model = map(data, ~ lm(returns ~ market_return$returns, data = .))) %>%
+  mutate(model = map(data, ~ lm(returns ~ market_returns_tidy$returns, data = .))) %>%
   mutate(model = map(model, tidy)) %>% 
   unnest(model)
 
 beta_assets
 ```
 
-Now that looks human readable and presentable. We will do one further cleanup and get rid of the intercept results since we are not going to use them. 
+Now that looks human readable and presentable. We will do one further cleanup and get rid of the intercept results since we are isolating the betas. 
 
 ```{r}
 beta_assets <- 
   asset_returns_long %>% 
   nest(-asset) %>% 
-  mutate(model = map(data, ~ lm(returns ~ market_return$returns, data = .))) %>% 
+  mutate(model = map(data, ~ lm(returns ~ market_returns_tidy$returns, data = .))) %>% 
   unnest(model %>% map(tidy)) %>% 
-  filter(term == "market_return$returns") %>% 
+  filter(term == "market_returns_tidy$returns") %>% 
   select(-term)
 
 beta_assets
@@ -144,12 +180,12 @@ beta_assets
 A quick sanity check on those asset betas should reveal that SPY has beta of 1 with itself. 
 
 ```{r}
-beta_assets %>% select(asset, estimate)
+beta_assets %>% select(asset, estimate) %>% filter(asset == "SPY")
 ```
 
-Besides confirming SPY's beta = 1, do we notice anything else of interest? Well, EFA, IJS and EEM have betas close to 1, and AGG has a negative but small beta. Let's see how our combination of these assets leads to a portfolio beta.
+Now let's see how our combination of these assets leads to a portfolio beta.
 
-We already have our portfolio weights from section 1 on portfolio retuns. We multiply them by the respective beta estimates.
+We already have our portfolio weights stored as `w_1`, `w_2`, through to `w_5`. We multiply them by the respective beta estimates.
 
 ```{r}
 beta_byhand <- 
@@ -162,32 +198,31 @@ beta_byhand <-
 beta_byhand
 ```
 
-That beta is the same as we calculated above and now we know the the covariance of portfolio returns and market returns divided by the variance of market returns is equal to the weighted estimates we got by regressing each asset's return on market returns. 
+That beta is the same as we calculated above using the covariance/variance method, and now we know the the covariance of portfolio returns and market returns divided by the variance of market returns is equal to the weighted estimates we got by regressing each asset's return on market returns. 
 
 We can make things even more efficient, of course, with built-in functios. Let's go to the `xts` world and use the built-in `CAPM.beta()` function from `PerformanceAnalytics`. That function takes two arguments: the returns for the portfolio (or any asset) whose beta we wish to calculate, and the market returns. Our function will look like `CAPM.beta(portfolio_returns_xts_rebalanced_monthly, mkt_return_xts)`.
 
 ```{r}
-mkt_return_xts <- asset_returns_xts$SPY
-beta_builtin_xts <- CAPM.beta(portfolio_returns_xts_rebalanced_monthly, mkt_return_xts)
+
+beta_builtin_xts <- CAPM.beta(portfolio_returns_xts_rebalanced_monthly, market_returns_xts)
 
 beta_builtin_xts
 ```
 
 We will run that same function through a `dplyr` and tidyquant code flow to stay in the tidy world.
 
-First we'll use dplyr to grab our betas. We'll return to this flow later for some visualization but for now will extract the portfolio beta. 
+First we'll use dplyr to grab our portfolio beta. We'll return to this flow later for some visualization but for now will extract the portfolio beta. 
 
 To calculate the beta, we call 
-`do(model = lm(returns ~ market_return$returns, data = .))`. Then we head back to the `broom` package and use the `tidy()` function to make our model results a little easier on the eyes.
+`do(model = lm(returns ~ market_returns_tidy$returns, data = .))`. Then we head back to the `broom` package and use the `tidy()` function to make our model results a little easier on the eyes.
 
 ```{r}
 
 beta_dplyr_byhand <-
   portfolio_returns_tq_rebalanced_monthly %>% 
-  do(model = lm(returns ~ market_return$returns, data = .)) %>% 
+  do(model = lm(returns ~ market_returns_tidy$returns, data = .)) %>% 
   tidy(model) %>% 
-  slice(-1) %>% 
-  select(estimate)
+  mutate(term = c("alpha", "beta"))
 
 beta_dplyr_byhand
 ```
@@ -197,7 +232,7 @@ One more flow for built-in functions using `tidyquant` and the `tq_performance()
 ```{r}
 beta_builtin_tq <- 
   portfolio_returns_tq_rebalanced_monthly %>% 
-  mutate(market_return = asset_returns_dplyr_byhand$SPY) %>% 
+  mutate(market_return = market_returns_tidy$returns) %>% 
   na.omit() %>% 
   tq_performance(Ra = returns, 
                  Rb = market_return, 
@@ -210,24 +245,83 @@ Let's take a quick look at our four beta calculations.
 ```{r}
 beta_byhand
 beta_builtin_xts
-beta_dplyr_byhand$estimate
+beta_dplyr_byhand$estimate[2]
 beta_builtin_tq$beta_tq
 ```
 
-Consistent results and a beta near 1 as we were expecting, since our portfolio has a 25% allocation to the S&P500 and the last few years have been a market regime of high correlations.  We're less concernced with number and more so with the various code flows used to get here. 
+Consistent results and a beta near 1 as we were expecting, since our portfolio has a 25% allocation to the S&P500.  We're less concernced with number and more so with the various code flows used to get here. 
 
 [A WORD ON THOSE FLOWS]
 
-Now on to visualization.
+Now on to visualization. Since we have introduced a bit of linear modeling, let's return to that `dplyr` by-hand method and visualize the relationshiop between our portfolio and the market returns.  
 
-For visualization, let's return to that dplyr by-hand method and explore the `augment()` function from `broom`. 
+A good way to start is a scatterplot with market returns on the x-axis and portfolio returns on the y-axis. 
 
-The code chunk below will take our model results and then the `augment()` function will add predicted values to the original data set. 
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_returns_tidy$returns) %>% 
+  ggplot(aes(x = market_returns, y = returns)) + 
+  geom_point(color = "cornflowerblue") +
+  ylab("portfolio returns") +
+  xlab("market returns")
+```
 
-```{r, warning = FALSE}
+Our beta calculation was communicating a strong linear relationship, and this scatterplot is communicating the same. We can add a simple regression line to it with `geom_smooth(method = "lm", se = FALSE, color = "green")`.  
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_returns_tidy$returns) %>% 
+  ggplot(aes(x = market_returns, y = returns)) + 
+  geom_point(color = "cornflowerblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "green") +
+  ylab("portfolio returns") +
+  xlab("market returns")
+```
+
+That green line was produced by the call to `geom_smooth(method = 'lm')`. Under the hood, `ggplot` fit a linear model of the relationship between market returns and portfolio returns. The slope of that green line is the CAPM beta that we calculated earlier.  To confirm that, we can add a line to the scatter that has a slope equal to our beta calculation and a y-intercept equal to what I labeled as alpha in the `beta_dplyr_byhand` object. 
+
+To add the line, we invoke `geom_abline(aes(intercept = beta_dplyr_byhand$estimate[1], slope = beta_dplyr_byhand$estimate[2])`.
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_returns_tidy$returns) %>% 
+  ggplot(aes(x = market_returns, y = returns)) + 
+  geom_point(color = "cornflowerblue") +
+  geom_abline(aes(intercept = beta_dplyr_byhand$estimate[1], 
+                  slope = beta_dplyr_byhand$estimate[2]), 
+              color = "purple") +
+  ylab("portfolio returns") +
+  xlab("market returns")
+```
+
+
+We can plot both lines simultaneously to confirm to ourselves that they are the same - they should be right on top of each other but the purple line, our manual `abline`, extends into infinity so we should see it start where the green line ends.
+
+```{r}
+portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_returns_tidy$returns) %>% 
+  ggplot(aes(x = market_returns, y = returns)) + 
+  geom_point(color = "cornflowerblue") +
+  geom_abline(aes(intercept = beta_dplyr_byhand$estimate[1], 
+                  slope = beta_dplyr_byhand$estimate[2]), 
+              color = "purple") +
+  geom_smooth(method = "lm", se = FALSE, color = "green") +
+  ylab("portfolio returns") +
+  xlab("market returns")
+```
+
+
+Alright, that seems to confirm that the fitted line calculated by `ggplot` has a slope equal the beta we calculated ourselves.
+
+
+Before concluding our analysis of CAPM beta, let's explore the  `augment()` function from `broom` as it's a useful part of the tidy modelling toolkit. 
+
+The code chunk below will start with model results from `lm(returns ~ market_returns_tidy$returns...)` and then the `augment()` function will add predicted values to the original data set. Those predicted values will be in the `.fitted` column. 
+
+```{r}
 portfolio_model_augmented <- 
 portfolio_returns_tq_rebalanced_monthly %>% 
-  do(model = lm(returns ~ market_return$returns, data = .)) %>% 
+  do(model = lm(returns ~ market_returns_tidy$returns, data = .)) %>% 
   augment(model)
 
 portfolio_model_augmented
@@ -239,11 +333,12 @@ Let's use `ggplot()` to see how well the fitted return values match the actual r
 portfolio_model_augmented %>% 
   ggplot(aes(x = portfolio_returns_tq_rebalanced_monthly$date)) + 
   geom_line(aes(y = returns), color = "cornflowerblue") + 
-  geom_line(aes(y = .fitted), color = "green") 
+  geom_line(aes(y = .fitted), color = "green") +
+  xlab("date")
 ```
 
 
-Those are monthly returns. How about growth of a dollar? 
+Those are monthly returns and the fitted values seem to track well. Let's convert both actual returns and fitted returns to the growth of a dollar and run the same comparison. 
 
 ```{r}
 portfolio_model_augmented %>%
@@ -261,4 +356,97 @@ portfolio_model_augmented %>%
 
 Our fitted growth looks pretty good, which again is unsurprising since we regressed on SPY, a big component of our portfolio. 
 
-Closing thoughts on beta and modeling? 
+
+
+### On to Shiny
+
+1) scatter with line 
+2) model returns
+3) input slightly different? Or force it to the S&P? 
+
+Get the market return. 
+
+```{r, eval = FALSE}
+market_return <- eventReactive(input$go, {
+  market_return <- 
+    getSymbols("SPY", src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Ad(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`("SPY") %>% 
+    to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+    mutate(returns = (log(SPY) - log(lag(SPY)))) %>% 
+    na.omit() %>%
+    select(date, returns)
+  
+})
+```
+
+Get portfolio returns. 
+
+```{r, eval = FALSE}
+portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
+  
+  prices <- prices()
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  portfolio_returns_tq_rebalanced_monthly <- 
+      prices %>% 
+      to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+      tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+      gather(asset, returns, -date) %>% 
+      group_by(asset) %>%  
+      mutate(returns = (log(returns) - log(lag(returns)))) %>% 
+      na.omit() %>%
+      tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
+})
+```
+
+
+Calculate beta and tidy the results. 
+
+```{r, eval = FALSE}
+beta_dplyr_byhand <- eventReactive(input$go, {
+  
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
+  
+  market_return <- market_return()
+  
+  beta_dplyr_byhand <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  do(model = lm(returns ~ market_return$returns, data = .)) %>% 
+  tidy(model) %>% 
+  mutate(term = c("alpha", "beta"))
+  
+})
+```
+
+Now call to `ggplot()` just as we did in our original calculation. 
+
+```{r, eval = FALSE}
+renderPlot({
+  portfolio_returns_tq_rebalanced_monthly <- portfolio_returns_tq_rebalanced_monthly()
+  market_return <- market_return()
+  
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_return$returns) %>% 
+  ggplot(aes(x = market_returns, y = returns)) + 
+  geom_point(color = "cornflowerblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "green") +
+  ylab("portfolio returns") +
+  xlab("market returns")
+})
+```
+
+We will add one new aesthetic by calling `renderTable()` so we can display the results of our model.
+ 
+```{r, eval = FALSE}
+renderTable({
+  beta_dplyr_byhand()
+}, digits = 4)
+```

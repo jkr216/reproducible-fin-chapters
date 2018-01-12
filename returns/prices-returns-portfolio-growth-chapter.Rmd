@@ -35,16 +35,18 @@ Our ultimate goal is to constructe a 5-asset portfolio consisting of the followi
     + SPY (S&P500 fund) weighted 25%
     + EFA (a non-US equities fund) weighted 25%
     + IJS (a small-cap value fund) weighted 20%
-    + EEM (an emerging-mkts fund) weighted 20%
+    + EEM (an emerging-markets fund) weighted 20%
     + AGG (a bond fund) weighted 10%
 
-I chose those 5 assets because they seem to offer a balanced blend of large, small, international, emerging and bond exposure. We will include several Shiny applications in this book and those will enable you or any other end user to build a custom portfolio.  For the rest of our work inside of this book, we will not change or deviate from these 5 assets and the chosen portfolio. That said, changing to different assets and weights does not involve a heavy lift and I encourage you to experiment with different asset combinations.
+I chose those 5 assets because they seem to offer a balanced blend of large, small, international, emerging and bond exposure. We will include several Shiny applications in this book and those will enable you or any other end user to build a custom portfolio and see how things change.  For the rest of our work inside of this book, we will not change or deviate from these 5 assets and the chosen portfolio. That said, changing to different assets and weights does not involve a heavy lift and I encourage you to experiment with different asset combinations.
 
 Let's get to step 1 wherein we import adjusted price data for the 5 ETFs to be used in our porftolio and save them to an `xts` object called `prices`.
 
-First, we need to choose ticker symbols and store them in a vector called symbols. We do that with `symbols <- c("SPY","EFA", "IJS", "EEM","AGG")`.  Those are the tickers for the 5 assets in our portfolio.
+First, we need to choose ticker symbols and store them in a vector called symbols. We do that with `symbols <- c("SPY","EFA", "IJS", "EEM","AGG")`.  Those are the tickers for the 5 assets in our portfolio. If you want to change to different assets for testing, change those tickers.
 
-We will then pass `symbols` to Yahoo! Finance via the `getSymbols()` function from the `quantmod` package. This will return an object with the opening price, closing price, adjusted price, daily high, daily low and daily volume. We don't want to work with all of those, though. The adjusted price is what we want.
+We will then pass `symbols` to Yahoo! Finance via the `getSymbols()` function from the `quantmod` package. This will return an object with the opening price, closing price, adjusted price, daily high, daily low and daily volume. We don't want to work with all of those, though. The adjusted price is what we want. 
+
+Note that we are enforcing a starting date of "2013-01-01" and an end date of "2017-12-31". That means we will be working with 5 years of data. If you wish to run this script or pull data that is up-to-date as of today, you can remove the argument `to = "2017-12-31"`. 
 
 To isolate the adjusted price, we use the `map()` function from the `purrr` package and apply `Ad(get(.))` to the imported prices. This will `get()` the adjusted price from each of our individual price series.  If we wanted the closing price, we would run `Cl(get(.))`.  That `.` refers to our initial object. Note that if you wish to choose different stock tickers, you change the tickers in the `symbols` vector.
 
@@ -60,8 +62,11 @@ symbols <- c("SPY","EFA", "IJS", "EEM","AGG")
 
 # The prices object will hold our raw price data throughout this book.
 prices <- 
-  getSymbols(symbols, src = 'yahoo', from = "2013-01-01", 
-             auto.assign = TRUE, warnings = FALSE) %>% 
+  getSymbols(symbols, src = 'yahoo', 
+             from = "2013-01-01", 
+             to = "2017-12-31",
+             auto.assign = TRUE, 
+             warnings = FALSE) %>% 
   map(~Ad(get(.))) %>% 
   reduce(merge) %>%
   `colnames<-`(symbols)

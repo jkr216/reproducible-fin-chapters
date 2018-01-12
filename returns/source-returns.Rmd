@@ -20,13 +20,13 @@ library(tibbletime)
 ```
 
 
-```{r, message=FALSE, warning=FALSE}
+```{r}
 # The symbols vector holds our tickers. 
 symbols <- c("SPY","EFA", "IJS", "EEM","AGG")
 
 # The prices object will hold our raw price data throughout this book.
 prices <- 
-  getSymbols(symbols, src = 'yahoo', from = "2013-01-01", 
+  getSymbols(symbols, src = 'yahoo', from = "2013-01-01", to = "2017-12-31", 
              auto.assign = TRUE, warnings = FALSE) %>% 
   map(~Ad(get(.))) %>% 
   reduce(merge) %>%
@@ -34,11 +34,8 @@ prices <-
 
 ```
 
-### The XTS World
 
-We now have an `xts` object of the adjusted prices for our 5 assets. Have a quick peek.
-
-```{r, message=FALSE, warning=FALSE}
+```{r}
 prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
 
 asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
@@ -128,6 +125,7 @@ portfolio_returns_xts_rebalanced_monthly <-
 portfolio_returns_xts_rebalanced_yearly <- 
   Return.portfolio(asset_returns_xts, weights = w, rebalance_on = "years") %>%
   `colnames<-`("returns")
+
 ```
 
 ```{r}
