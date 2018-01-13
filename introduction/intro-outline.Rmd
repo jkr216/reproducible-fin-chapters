@@ -1,26 +1,52 @@
 ---
 title: "Intro Outline"
-output: html_notebook
+output:
+  pdf_document: default
+  html_notebook: default
 ---
 
 ## What is RF and why does it matter?
 
-Why do robo-advisors like Betterment and Wealthfront cost a fraction of the price of traditional money managers? Why can one credit agency rate debt in 30 days but it takes another 6 months? How is Blackrock doing away with human stock-picking in favor of machine learning? Those firms have embraced the principles of modern data science and they can do things faster, cheaper and smarter. Their advantage is growing every day and many financial institutions are frantically working to be the leader, or to catch up to the leader, in this brave new world.
+Why do robo-advisors cost a fraction of the price of traditional money managers? Why can one credit agency rate debt in 30 days but it takes another 6 months? How are the world's largest active investors doing away with human stock-picking in favor of machine learning? Those firms have embraced the principles of modern data science and they can do things faster and smarter. Their advantage is growing every day and many financial institutions are frantically working to be the leader, or to catch up to the leader, in this brave new world.
 
 *Reproducible Finance* explains how to build a great data science practice in the world of finance and compete in this modern financial jungle. The core hypothesis is that the world of finance is changing, embracing data science and technology, but there's no road map for how to do that. 
+
+# How is this book different from other R code for finance books? 
+
+The 3 paths and how that affects the make up of your team, making things readable, Shiny apps end poit, thinking about people, culture and alpha.
+
+To the extent that code can be reflective of and even part of culture, this book is different in that it writes code with an toward a culture of reproducibility and building the kind of data science team that follows the philosophy of reproducibility.  *Reproducible Finance* is different from other books on R in finance because we are not going to focus on the math, or the theory, or the cleverest algorithms. We will focus on making our code readable, reusable and reproducible to a wide audience of quants - and that will drive us to solve our codingn challenges in those three coding paradigms, and by hand where appropriate. This not only fosters openness to the best tool, it opens the door for combining these tools, as we willdo when deconstructing portfolio volatility. Furthermore, the three paradigms emphasize, possibly, overemphasize understanding of underlying foundational functions. 
+
+Finance is not physics, though, and we're not searching for immutable truths. Our truths are mutable. Very mutable. In fact, our best truths are the most mutable because of arbitrage (if we believe in efficient markets). That's why the BBG hides ideas. If someone else knows the strategy, it's value disappears.  So, why is repoducibility going to generate more alpha than the BBG? 
+
+Let's start from the end, the inevitable day when the BBG leaves his firm, but hasn't explained any of his positions to a depth necessary to either unwind them or continue them. 
+
+Beyond that, the reproducible team wins because of the miracle of compounding. Much like interest, quantitative creativity compounds, and 20 smart people collaborating and improving each other's scripts 1% per day will outstrip the lone genius or geniuses who work alone. Maybe not in the very short term when randomness can win the day, but over the long term a team with the right technology, people and culture will see exponential improvement in their data science.
+
+How does our code relate to this? The code has to be readable and understandable, else what's the point of being open with it. The data has to be wrangled in a way that a new team member can understand its provenance - that enable testing on clean data (or if you prefer the latest lingo, it enables use of a test data set outside the training data).
+
+From the outside, code might not seem like part of the culture, or it might not seem like it can affect the people on team. But it can. And it does. If you do your best work in the `xts` world, and your fund forces you into the tidy world, you might feel stifled. Same for tidyversers who find themselves in an `xts` shop. That might not sound like a big deal, but it doesn't take much for a strategy or idea to from underperformance to outperformance.  An open coding environment empowers the best people to do their best work.
+
+One very important point: I am not saying that all tasks need to be accomplished three ways.  That will lead to 3x the work and that is not feasible. I am saying that there should be a policy or best practice that could needs to be reproduicible by the team. Make sure that the tidyversers at least have worked through some foundational scripts (like the ones in this book, but it doesn't have to be these) using `xts`, and are aware that some colleagues might want to reuse their work by porting to a new paradigm. If those colleagues ask for help in doing so, the expectation should be that the answer is yes.
+
+In the end, is it possible the BBG can generate more alpha than a team using the code and living the culture of reproducibility? Of course. There is a positive probability of that occurring, but it's not the most likely outcome in the long run.
 
 # 4 pillars
 Beyond the theory of RF, what are the building blocks?
 
 It consists of 4 pillars: technology, people, culture and alpha. For our purposes, technology equals R code, functions, data visualizations and Shiny applications. We are going to painstakingly cover the R code pillar in the pages to come but before we do that, let me spend a few paragraphs on those other three pillars.
 
-People are the second pillar. Code doesn't write itself, data doesn't clean itself, and hypotheses definitely don't test themselves.  For all the talk about machine learning and artificial intelligence, they still depend on algorithms conceived of and written by people. People need to be hired, trained, motivated, and, very importantly in today's world, they want to be in an environment that is welcoming to modern data science. 
+People are the second pillar. Code doesn't write itself, data doesn't clean itself, and hypotheses  don't formulate themselves.  For all the talk about machine learning and artificial intelligence, they still depend on algorithms conceived of and written by people. People need to be hired, trained, motivated, and, very importantly in today's world, they want to be in an environment that is welcoming to modern data science. 
+
+Imagine two quant funds: fund 1 uses all 3 coding paradigms and encourages you to choose or stay with the one where you work best. Fund 1 also is committed to making sure that you learn about the other paradigms, at least the basics, to foster collaboration and reproducibility. Fund 1 knows it's a lot of work to learn those other paradigms, but it will support you in learning them. Some people even find that they prefer a new paradigm, or can take the lessons of one to another. Fund 2, by contrast, only hires or allows people who use one of the code universes. If you do, you'll fit in great. If not, you'll have to change. 
+
+I can't say one is better than the other, but fund 1 will attract the quants and data scientists that want to do data science the right way. 
 
 That welcoming environment is part of the third pillar: culture. It's not one of my favorite buzz words but financial institutions have a distinctive culture that is typically less conducive to reproducibility. 
 
 A culture of reproducibility is one in which [,,,,,,,,,,,,,]. 
 
-The opposite of this would be the culture of the Black Box Genius, what I call the BBG. In the BBG culture, the best ideas are kept secret, only one person understands them, and that one person can hold the company ransom.  Any attempt to understand the secret ideas is an attempt to assassinate the lone genius who created the secret ideas. I'm exaggerating but it's not hard to understand where this comes from: if the best ideas get shared, they seem to lose their value. 
+The opposite of this would be the culture of the Black Box Genius, what I call the BBG, the nemesis of reproducibility. In the BBG culture, the best ideas are kept secret, only one person understands them, and that one person can hold the company ransom.  Any attempt to understand the secret ideas is an attempt to assassinate the lone genius who created the secret ideas. I'm exaggerating but it's not hard to understand where this comes from: if the best ideas get shared, they seem to lose their value. 
 
 It's the expecation of reproducibility and the recognition that repro'ing someone's work is not attacking that someone, in fact, it's a way of legitimizing it. For example, if there's a policy: nothing goes into production, or gets put in front of a client, LP or Pm unless it has been repro'd or stress tested, then everyone knows their work isn't even being considered for the big time unless it is being repro'd. In that system, reproducing work is a stamp of approval, not a questioning. And, it makes so that lack of reproducibility has a built-in objective cost. A team member can keep work un-reproudicibile, but that work will never get to production. 
 
@@ -80,17 +106,40 @@ It's worth emphasizing that data visualization is a large part of and a crucial 
 And of course to the extent that clients, customers, partners, partners, bosses, portfolio managers and anyone else want actionable insights from us, data visualizations will almost certainly be more prominent in the discussion than the nitty gritty of code, data or even statistics. I will emphasize data visualization throughout the book and implore you: spend as much or more time on data visualizations as you do on the rest of quantitative finance!   
 
 ## Shiny Applications
-Each of our chapters will conclude with the building of a Shiny application, so that by book's end, you will have the tools to build a suite of Shiny apps and dashboards for portfolio analysis. What is Shiny? 
 
-Shiny is a package that wraps R code into interactive web applications so us R coders don't have to learn HTML, CSS or Javascript. It was created by Joe Cheng, the CTO of RStudio and you can learn more about Shiny at shiny.rstudio.com. 
+Each of our chapters will conclude with the building of a Shiny application, so that by book's end, you will have the tools to build a suite of Shiny apps and dashboards for portfolio analysis. What is Shiny?
 
-Shiny applications are extremely useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio or how volatility has changed over time, but he or she might not want to see the code, data and functions used for the calculation. Or, another PM might love the work we did on Portfolio 1, and have a desire to apply to Portfolios 2-100. Shiny allows that PM to change input parameters on the fly and ad infinitum.  
+Shiny is a package that wraps R code into interactive web applications so R coders don't have to learn HTML, CSS or Javascript. It was created by Joe Cheng, the CTO of RStudio and you can learn more about Shiny at shiny.rstudio.com. 
 
-In terms of building Shiny apps, we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. There's no better way to learn than to build! Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to become an expert in Shiny, please include a visit to shiny.rstudio.com.    
+Shiny applications are immeasurably useful for sharing our work with end users who might not want to read code, or open an IDE, or dig into analytics.  For example, a portfolio manager might want to build a portfolio and see how a dollar would have grown in that portfolio or how volatility has changed over time, but he or she might not want to see the code, data and functions used for the calculation. Or, another PM might love the work we did on Portfolio 1, and have a desire to apply to Portfolios 2-100. 
 
-Shiny applications are web-based and can't be viewed in a book! You will need to head to this book's website www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their full source code. It's not necessary to go see them live on the internet, but it will be a lot easier to envision what the code is doing. 
+Shiny allows that PM to change input parameters on the fly and ad infinitum. It allows us to port our work from a script editor over to an interactive dashboard. 
 
-## What We Won't Cover
+In terms of building Shiny apps, we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. Each chapter will include at least one. If you want to see those apps, here is what we will build: 
+
+1) Growth of a Dollar
+
+2) Portfolio Volatility
+
+3) Asset Contribution to Portfolio Volatility
+
+4) Skewness/Kurtosis of Returns
+
+5) CAPM Beta
+
+6) Sharpe Ratio
+
+7) Sortino Ratio
+
+8) Simulate Returns Monte Carlo
+
+
+
+Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to continue in Shiny development, please go through the tutorials shiny.rstudio.com. They are free, they are fun, they are useful.    
+
+Shiny applications are web-based and can't be viewed in a book. You will need to head to this book's website www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their full source code. It's not necessary to go see them live on the internet, but it will be a lot easier to envision what the code is doing. 
+
+## Portfolio Theory: What We Won't Cover
 
 The goal of this book is to demonstrate several, reproducible workflows for calculating and visualizing portfolio data and statistics. Beyond introductions, we will not delve deep into the math that underlies our calculations or delve deep into the underpinnings portfolio theory. That stuff is important and highly recommended (and fascinating!) but it's not the focus of this book. For readers who want to explore those concepts, I recommend Eric Zivot's *Introduction to Computational Finance and Financial Econometrics with R* (see if you can port his code/concepts over to one of our methods) and, more generally, the iconic Bodie Kane and Markus *Investments*.  If you're a primary source type of person, Harry Markowitz's original 1959 monograph on mean-variance optimization is still a thrilling read.
 
@@ -98,6 +147,13 @@ The goal of this book is to demonstrate several, reproducible workflows for calc
 
 This book is also not going to cover two important pieces of the technology stack: building packages and version control with github. 
 
-`PerformanceAnalytics`, `dplyr`, `tidyquant` - they're all packages and that means it easy for us to access their function. Saving our work and data into R packages is a great way to share them for reuse and reproduction across our team. Packages are a huge part of R and the R ecosystem.  If you work at a financial institution, the best practice is definitely to save your functions and models into private packages in private repositories for use by your team.  The reason I am not going to cover package building is that Hadley has already covered it in his book *R Packages* (available here http://r-pkgs.had.co.nz/).   
+`PerformanceAnalytics`, `dplyr`, `tidyquant` - they're all packages and that means it's easy for us to access their function. Saving our work and data into R packages is a great way to share them for reuse and reproduction across our team. Packages are a huge part of R and the R ecosystem.  If you work at a financial institution, the best practice is definitely to save your functions and models into private packages in private repositories for use by your team.  The reason I am not going to cover package building is that Hadley has already covered it in his book *R Packages* (available here http://r-pkgs.had.co.nz/). I will return to packages in the conclusion when I discuss more Shiny best practices.
 
-Version control with github (or another technology) is also hugely important. It's how we and our team keep track of changes to our code, models, data, packages, everything. Again, this topic has been covered very well by Jenny Bryan in here book *Happy Git with R* (http://happygitwithr.com/)
+Version control with github (or another technology) is also hugely important. It's how we and our team keep track of changes to our code, models, data, packages, everything. Why is that crucial? If my team or a PM is using my model or my data wrangling and I make a change it on my computer, how will they get the new code? How will they even know about the new code? The answer is a version control system. In brief, the version control repository is where I put any code that I update, and it's where all of the team put any code they update.  When someone wants my code, they take it from the version control location. They don't get it form me! 
+
+Again, this topic has been covered very well by Jenny Bryan at the web project happygitwithr.com.
+
+## Let's get to it! 
+
+Enough set up, let's start writing some code! 
+

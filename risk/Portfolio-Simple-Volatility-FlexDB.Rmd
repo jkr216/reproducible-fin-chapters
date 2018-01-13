@@ -5,23 +5,20 @@ output:
   flexdashboard::flex_dashboard:
     orientation: rows
     vertical_layout: fill
-    theme: spacelab
     source_code: embed
 ---
 
 
 ```{r setup, include=FALSE}
-library(flexdashboard)
 library(tidyverse)
 library(tidyquant)
 library(timetk)
 library(highcharter)
-
-source("function-folder/simple-vol-helpers.r")
+library(scales)
 
 ```
 
-Volatility Dashboard
+Volatility 
 ===========================================
 
 Sidebar {.sidebar}
@@ -32,45 +29,47 @@ Sidebar {.sidebar}
 fluidRow(
   column(6,
   textInput("stock1", "Stock 1", "SPY")),
-  column(4,
-  numericInput("w1", "Portf. %", 40, min = 1, max = 100))
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
 )  
 
 fluidRow(
   column(6,
-  textInput("stock2", "Stock 2", "VGT")),
-  column(4,
-  numericInput("w2", "Portf. %", 20, min = 1, max = 100))
+  textInput("stock2", "Stock 2", "EFA")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
 )
 
 fluidRow(
   column(6,
-  textInput("stock3", "Stock 3", "EFA")),
-  column(4,
+  textInput("stock3", "Stock 3", "IJS")),
+  column(5,
   numericInput("w3", "Portf. %", 20, min = 1, max = 100))
 )
 
 fluidRow(
   column(6,
-  textInput("stock4", "Stock 4", "DBC")),
-  column(4,
-  numericInput("w4", "Portf. %", 10, min = 1, max = 100))
+  textInput("stock4", "Stock 4", "EEM")),
+  column(5,
+  numericInput("w4", "Portf. %", 20, min = 1, max = 100))
 )
 
 fluidRow(
   column(6,
   textInput("stock5", "Stock 5", "AGG")),
-  column(4,
+  column(5,
   numericInput("w5", "Portf. %", 10, min = 1, max = 100))
 )
 
-textInput("benchmark", "Benchmark for Comparison", "^RUT")
 
 fluidRow(
-  column(6,
-  dateInput("start_date", "Start Date", value = "2013-01-01")),
-  column(4,
-  numericInput("window", "Window", 6, min = 3, max = 20, step = 1))
+  column(7,
+  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd"))
+)
+
+fluidRow(
+  column(5,
+  numericInput("window", "Window", 12, min = 3, max = 36, step = 1))
 )
 
 actionButton("go", "Submit")
@@ -78,128 +77,113 @@ actionButton("go", "Submit")
 ```
 
 ```{r}
-portfolio_rolling_vol <- eventReactive(input$go, {
+
+prices <- eventReactive(input$go, {
+  symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
   
-  returns_df <- 
-    componentReturns_df(input$stock1, input$stock2, input$stock3, input$stock4, 
-                        input$stock5, input$start_date) %>% 
-    mutate(date = ymd(date))
+  prices <- 
+    getSymbols(symbols, src = 'yahoo', from = input$date, 
+               auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Ad(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`(symbols)
+})
+
+port_rolling_sd_tidy <- eventReactive(input$go, {
   
-  weights <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  prices <- prices()
+  
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  portfolio_returns_tq_rebalanced_monthly <- 
+    prices %>% 
+    to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+    tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+    slice(-1) %>%
+    gather(asset, returns, -date) %>%
+    group_by(asset) %>% 
+    mutate(returns = (log(returns) - log(lag(returns)))) %>%
+    tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
   
   window <- input$window
   
-  roll_portfolio_result <-
-    map_df(1:(nrow(returns_df) - window), rolling_portfolio_sd, 
-         returns_df = returns_df, window = window, weights = weights) %>%
-    mutate(date = ymd(date)) %>% 
-    select(date, everything()) %>%
-    tk_xts(date_var = date) %>% 
-    `colnames<-`("Rolling Port SD")
-   # an xts comes out of this
+  port_rolling_sd_tidy <- 
+  portfolio_returns_tq_rebalanced_monthly %>% 
+  tq_mutate(mutate_fun = rollapply,
+            width = window,
+            FUN = sd,
+            col_rename = ("rolling_sd")) %>%
+  select(date, rolling_sd) %>% 
+  na.omit()
+    
 })
 
 ```
 
-```{r}
-benchmark_rolling_vol <- eventReactive(input$go, {
-  
-  benchmark_prices <- 
-    getSymbols(input$benchmark, src = 'yahoo', from = input$start_date, 
-               auto.assign = TRUE, warnings = FALSE) 
-  benchmark_close <- Cl(get(benchmark_prices))
-    
-  benchmark_prices_monthly <- to.monthly(benchmark_close, indexAt = "first", OHLC = FALSE)
-  benchmark_returns <- na.omit(Return.calculate(benchmark_prices_monthly, method = "log"))
-  
-  benchmark_rolling_sd <- rollapply(benchmark_returns,
-                             input$window,
-                             function(x) StdDev(x))
-  benchmark_rolling_sd <- round(benchmark_rolling_sd, 4) * 100
-  
-  
-})
 
-benchmark <- eventReactive(input$go, {input$benchmark})
-
-portfolio_total_sd <- eventReactive(input$go, {
-  returns_xts <- 
-    componentReturns_df(input$stock1, input$stock2, input$stock3, input$stock4, 
-                        input$stock5, input$start_date) %>% 
-    mutate(date = ymd(date)) %>% 
-    tk_xts(date_var = date)
-  
-  weights <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
-  
-  sd <- StdDev(returns_xts, weights = weights, portfolio_method = "single")
-  
-  sd <- round(sd, 4) * 100
-  
-})  
-
-benchmark_total_sd <- eventReactive(input$go, {
-  benchmark_xts <- 
-    getSymbols(input$benchmark, src = 'yahoo', from = input$start_date, 
-               auto.assign = TRUE, warnings = FALSE) 
-  
-  benchmark_close <- Cl(get(benchmark_xts))
-    
-  benchmark_prices_monthly <- to.monthly(benchmark_close, indexAt = "first", OHLC = FALSE)
-  benchmark_returns <- na.omit(Return.calculate(benchmarkprices_monthly, method = "log"))
-  
-  sd <- StdDev(benchmark_returns, portfolio_method = "single")
-  
-  sd <- round(sd, 4) * 100
-  
-}) 
-```
-
-
-
-
-Column {data-height=850}
+Row {data-height=500}
 ------------------------------------------
 
-### Portfolio Rolling Volatility
+### rolling vol hc
 
 ```{r}
 
 renderHighchart({
+  
+  port_rolling_sd_xts_hc <- 
+    port_rolling_sd_tidy() %>% 
+    tk_xts(date_col = date) %>% 
+    round(., 4) * 100
+  
+  port_max_date <- as.Date(index(port_rolling_sd_xts_hc[which.max(port_rolling_sd_xts_hc)]),
+                         format = "%Y-%m-%d")
+  port_min_date <- as.Date(index(port_rolling_sd_xts_hc[which.min(port_rolling_sd_xts_hc)]),
+                         format = "%Y-%m-%d")
+  
   highchart(type = "stock") %>% 
-    hc_title(text = paste("Portfolio Volatility vs", benchmark(), "Volatility", sep = " ")) %>%
-    hc_yAxis(title = list(text = "Vol Percent"),
+    hc_title(text = "Portfolio Rolling Volatility") %>%
+    hc_yAxis(title = list(text = "Volatility"),
            labels = list(format = "{value}%"),
            opposite = FALSE) %>% 
-    hc_add_series(portfolio_rolling_vol(), name = "Portfolio Vol", color = "blue") %>%
-    hc_add_series(benchmark_rolling_vol(), 
-                  name = paste(benchmark(), "Vol", sep = " "),
-                  color = "green") %>%
+    hc_add_series(port_rolling_sd_xts_hc, 
+                  name = "Portfolio Vol", 
+                  color = "cornflowerblue",
+                  id = "Port") %>%
+   hc_add_series_flags(port_max_date,
+                      title = c("Max Rolling Vol"), 
+                      text = c("maximum rolling volatility."),
+                      id = "Port") %>%
+  hc_add_series_flags(port_min_date,
+                      title = c("Min Rolling Vol"), 
+                      text = c("min rolling volatility."),
+                      id = "Port") %>%
     hc_add_theme(hc_theme_flat()) %>%
     hc_navigator(enabled = FALSE) %>% 
     hc_scrollbar(enabled = FALSE)
 })
 ```
 
-Row {data-height=190}
+Row {data-height=500}
 -----------------------------------------------------------------------
 
-### Standard Deviation Your Portfolio
-
-```{r, fig.height = 2}
-valueBoxOutput("approvalBox1")
-output$approvalBox1<-renderValueBox({
-  valueBox(value = portfolio_total_sd(), icon = "fa-line-chart", color = "primary")
-})
-```
-
-### Standard Deviation benchmark
+### rolling vol ggplot
 
 ```{r}
-
-valueBoxOutput("approvalBox2")
-output$approvalBox2<-renderValueBox({
-  valueBox(value = benchmark_total_sd(), icon = "fa-line-chart", color = "primary")
+renderPlot({
+  port_rolling_sd_tidy() %>% 
+    ggplot(aes(x = date)) +
+    geom_line(aes(y = rolling_sd), color = "cornflowerblue") + 
+    scale_y_continuous(labels = scales::percent) +
+    ggtitle("Portfolio Rolling Vol") +
+    ylab("volatility") +
+    scale_x_date(breaks = pretty_breaks(n = 8)) +
+    theme(plot.title = element_text(hjust = 0.5))
 })
 ```
+
 
 

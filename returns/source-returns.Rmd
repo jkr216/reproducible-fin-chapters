@@ -128,6 +128,19 @@ portfolio_returns_xts_rebalanced_yearly <-
 
 ```
 
+
+```{r}
+portfolio_returns_dplyr_byhand <- 
+  asset_returns_long %>%
+  group_by(asset) %>% 
+    mutate(weights = if_else(asset == symbols[1], w[1],
+                            if_else(asset == symbols[2], w[2],
+                                    if_else(asset == symbols[3], w[3],
+                                            if_else(asset == symbols[4], w[4], w[5])))))
+
+
+```
+
 ```{r}
 portfolio_returns_tq_rebalanced_monthly <- 
   asset_returns_long %>%

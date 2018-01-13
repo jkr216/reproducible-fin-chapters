@@ -1,0 +1,46 @@
+---
+title: "Returns Introdouction"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+library(tidyverse)
+library(tidyquant)
+library(highcharter)
+library(timetk)
+library(tibbletime)
+```
+
+Welcome to section 1, wherein we will perform the unglamorous work of taking raw price data for individual assets and tranforming them into monthly returns for a single portfolio. To map a data science work flow onto portfolio analysis, those steps encompass data import, cleaning, wrangling, transformation and initial visualization.  Even though the subtstantive issues are not complex, we will painstakingly go through the code to ensure that the data provenance is clear, reproducible and reusable. In fact, we will devote as much time to this section as we do to any of the sections are more statistical work. That might seem a bit unbalanced - afterall, quants don't get paid to import, clean and wrangle data. But it's foundational to the more complex stuff and when done well, it makes the complex much less complex. 
+
+Furthermore, our collaborators will thank us for this effort when they want to update our models or extend our work or stress test with different assumptions. Those collaborators include that most important of collaborators: our future self who needs to analyize risk/reward ratios, model betas and run simulations. 
+
+Here's what we want to accomplish in this section:
+
+1) Import daily prices from Yahoo! finance.
+2) Select the adjusted prices only. 
+3) Transform daily prices to monthly prices. 
+4) Transform monthly prices to monthly returns. 
+5) Chart monthly returns.
+6) Choose allocations or weights for each asset. 
+7) Calculate portfolio monthly returns based on asset monthly returns and weights.
+8) Chart portfolio returns
+9) Calculate growth of a dollar, given portfolio returns. 
+10) Chart the growth of a dollar
+10) Save all of our data objects for use by our collaborators and future self
+11) We will use those saved objects throughouth the rest of this book, so this work is important!
+
+Our ultimate goal is to constructe a 5-asset portfolio consisting of the following.
+
+    + SPY (S&P500 fund) weighted 25%
+    + EFA (a non-US equities fund) weighted 25%
+    + IJS (a small-cap value fund) weighted 20%
+    + EEM (an emerging-markets fund) weighted 20%
+    + AGG (a bond fund) weighted 10%
+
+I chose those 5 assets because they seem to offer a balanced blend of large, small, international, emerging and bond exposure. We will include several Shiny applications in this book and those will enable you or any other end user to build a custom portfolio and see how things change.  For the rest of our work inside of this book, we will not change or deviate from these 5 assets and the chosen portfolio. 
+
+That said, changing to different assets and weights does not involve a heavy lift and I encourage you to experiment with different asset combinations.

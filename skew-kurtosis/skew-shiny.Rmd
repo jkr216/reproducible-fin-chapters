@@ -1,5 +1,5 @@
 ---
-title: "Skewness Shiny"
+title: "Skewness Kurtosis Dashboard"
 runtime: shiny
 output:
   flexdashboard::flex_dashboard:
@@ -9,12 +9,10 @@ output:
 
 
 ```{r setup, message = FALSE}
-library(flexdashboard)
 library(tidyverse)
 library(highcharter)
 library(tidyquant)
 library(timetk)
-library(shiny)
 library(scales)
 ```
 
@@ -58,16 +56,20 @@ fluidRow(
   numericInput("w5", "Portf. %", 10, min = 1, max = 100))
 )
 
+fluidRow(
+  column(7,
+  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd"))
+)
 
 fluidRow(
-  column(6,
-  dateInput("date", "Starting Date", "2013-01-01", format = "yyyy-mm-dd")),
   column(4,
-  numericInput("window", "Window", 6, min = 3, max = 20, step = 1)))
+  numericInput("window", "Window", 6, min = 3, max = 20, step = 1))
+  )
 
 actionButton("go", "Submit")
+```
 
-# The prices object will hold our daily price data.
+```{r}
 prices <- eventReactive(input$go, {
   
   symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
@@ -82,16 +84,15 @@ prices <- eventReactive(input$go, {
 
 portfolio_returns_xts <- eventReactive(input$go, {
   prices <- prices()
+  
   w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
 
-  # XTS world
-
   prices_monthly <- to.monthly(prices, indexAt = "last", OHLC = FALSE)
+  
   asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
   
   portfolio_returns_xts <- 
-  Return.portfolio(asset_returns_xts, 
-                   weights = w) %>% 
+    Return.portfolio(asset_returns_xts, weights = w) %>% 
     `colnames<-`("returns")
 })  
   
@@ -130,9 +131,6 @@ portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
                weights     = w,
                col_rename  = "returns",
                rebalance_on = "months")
-  
-
-
 })
 
 ```

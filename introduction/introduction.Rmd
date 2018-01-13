@@ -5,17 +5,25 @@ output:
   html_notebook: default
 ---
 
-What is reproducible finance? 
+What is reproducible finance?
+ 
+The foundational hypothesis of *Reproducible Finance* is that the world of finance is changing, embracing data science and technology, but there's no roadmap for how to do that.  It's unnatural to finance, which is not a business that attracts or fosters scientific thinking.  
+
+R code is important, and the bulk of this book is dedicated to writing that R code. However, the reason this book is not called *R Code in Finance* is that *Reproducible Finance* will frequently emphasize reproducibility, reusability, readabiliyt other best practices that relate to but go beyond writing code. 
+
+To the extent that code can be reflective of and even part of culture, this book is different in that it writes code with an toward a culture of reproducibility and building the kind of data science team that follows the philosophy of reproducibility.  That's a lot different from other books on R in finance because we are not going to focus on the math, or the theory, or the cleverest algorithms. We will focus on making our code readable, reusable and reproducible to a wide audience of quants - and that will drive us to solve our codingn challenges in those three coding paradigms, and by hand where appropriate. This not only fosters openness to the best tool, it opens the door for combining these tools, as we willdo when deconstructing portfolio volatility
+
+From a pure R code perspective, the book will cover the basics of portfolio theory using R. Accordingly, the reader will learn how to calculate and analyze portfolio returns and risk, how to calculate and visualize the relationship between return and risk, and some foundational modeling to explain return and risk. Each subsection will include analysis and visualization, and the building of an interactive Shiny application. 
 
 *Reproducible Finance* is a philosophy for how to do build a data science practice in the world of finance. The world of finance is changing, embracing data science and technology, but there's no road map for how to do that.
 
 
-This book is about doing data science the right way in the financial world. The word "reproducible" encapsulates what I think that means.
+This book is about doing data science the right way in the financial world. The word "reproducible" encapsulates what I think that means. Reproducible code and work flows don't have to be ingenius or complex or world changing, but they should be clear, readable, and useful. 
 
 R code is important, and the bulk of this book is dedicated to writing that R code. However, the reason this book is not called *R Code in Finance* is that I will frequently emphasize reproducibility, reusability and other best practices that relate to but go beyond writing code. In fact, we will sometimes make coding decisions for non-coding reasons. 
 
 
-It consists of 4 pillars: technology, people, culture and alpha. The majority of this book covers the technology pillar, the first pillar, and the writing of R code in a way that is readable, reproducible, conducive. We are going to write a lot of code in the coming pages but before we do that, let me spend a few paragraphs on those other three pillars.
+It consists of 4 pillars: technology, people, culture and alpha. For our purposes, technology equals R code, functions and data visualizations. Rest assured, we are going to painstakingly write a lot of code in the coming pages but before we do that, let me spend a few paragraphs on those other three pillars.
 
 Humans are the second pillar. By humans, I  mean the team, including the leaders, managers and recruiters of the team, that are using the technology to gather and clean data, build models, test hypotheses and deliver actionable results to the rest of a financial instiution.  
 
@@ -88,6 +96,9 @@ Shiny applications are extremely useful for sharing our work with end users who 
 
 This book is not a guide on building Shiny apps but we will cover the basics and, more importantly, we will build several live, functioning Shiny applications. Similar to the rest of the R code in this book, we aim to build useful, reproducible Shiny apps but if your goal is to become an expert in Shiny, please start with shiny.rstudio.com or dedicated Shiny training.  
 
-That said, by the end of this book, we will have covered enough financial Shiny apps for the reader to be an intermediate app developer in the realm of portfolio management. Because our apps will emphasize reproducibility, you can take the foundation here and use it for more complex apps.
+That said, by the end of this book, we will have covered enough Shiny building material that the reader will be ready an intermediate developer of portfolio analysis apps . What's the definition of an intermediate Shiny app developer in portfolio management?  Because our apps will emphasize reproducibility, you can take the foundation here and use it for more complex apps.
 
-Shiny applications are web-based so you will need to head to www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their source code. It's not necessary to go see them live on the internet, but it will make it a lot easier to envision what the code is doing. 
+Shiny applications are web-based and can't be viewed in a book! You will need to head to this book's website www.reproduciblefinance.com/shiny to view and interact with them live. All of the applications built in this book are accessible there, along with their source code. It's not necessary to go see them live on the internet, but it will be a lot easier to envision what the code is doing. 
+
+On packages and github
+These are hugely important parts of reproducibility. We are not going to discuss them in detail but I wanted to include this brief chapter to draw your attention. Why? Packages have an entire book devoted tot hem. I recommend it. We will discuss some light best practices. Github is a version control tool and very important. But, it also, has entire manuals devoted it. Grokk Jenny Bryan's book/articles.
