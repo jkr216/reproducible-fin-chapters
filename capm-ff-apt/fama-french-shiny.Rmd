@@ -1,0 +1,180 @@
+---
+title: "Fama French Shiny"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+---
+
+```{r setup, message = FALSE}
+
+library(tidyquant)
+library(tidyverse)
+library(timetk)
+library(broom)
+library(tibbletime)
+library(highcharter)
+library(scales)
+library(readr)
+
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+
+
+temp <- tempfile()
+
+download.file(
+  # location of file to be downloaded
+  "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_3_Factors_CSV.zip",
+  # where we want R to store that file
+  temp)
+```
+
+
+Sidebar {.sidebar}
+=====================================
+  
+```{r}
+
+fluidRow(
+  column(6,
+  textInput("stock1", "Stock 1", "SPY")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(6,
+  textInput("stock2", "Stock 2", "EFA")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock3", "Stock 3", "IJS")),
+  column(5,
+  numericInput("w3", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock4", "Stock 4", "EEM")),
+  column(5,
+  numericInput("w4", "Portf. %", 20, min = 1, max = 100))
+)
+
+fluidRow(
+  column(6,
+  textInput("stock5", "Stock 5", "AGG")),
+  column(5,
+  numericInput("w5", "Portf. %", 10, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  dateInput("date", "Starting Date", min = "1990-01-01", "2013-01-01", format = "yyyy-mm-dd"))
+)
+
+actionButton("go", "Submit")
+```
+
+
+
+```{r}
+
+prices <- eventReactive(input$go, {
+  
+  symbols <- c(input$stock1, input$stock2, input$stock3, input$stock4, input$stock5)
+  
+  getSymbols(symbols, src = 'yahoo', from = input$date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+})
+
+
+portfolio_returns_tq_rebalanced_monthly_first_day <- eventReactive(input$go, {
+  
+  prices <- prices()
+  w <- c(input$w1/100, input$w2/100, input$w3/100, input$w4/100, input$w5/100)
+  
+  portfolio_returns_tq_rebalanced_monthly_first_day <- 
+      prices %>% 
+      to.monthly(indexAt = "firstof", OHLC = FALSE) %>% 
+      tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+      gather(asset, returns, -date) %>% 
+      group_by(asset) %>%  
+      mutate(returns = (log(returns) - log(lag(returns)))) %>% 
+      na.omit() %>%
+      tq_portfolio(assets_col  = asset, 
+               returns_col = returns,
+               weights     = w,
+               col_rename  = "returns",
+               rebalance_on = "months")
+  
+})
+
+
+Global_3_Factors <- eventReactive(input$go, {
+  
+  portfolio_returns_tq_rebalanced_monthly_first_day <- portfolio_returns_tq_rebalanced_monthly_first_day()
+  
+  Global_3_Factors <- 
+  read_csv(unz(temp, "Global_3_Factors.csv"), skip = 6) %>% 
+  rename(date = X1, MKT = `Mkt-RF`) %>%
+  mutate(date = ymd(parse_date_time(date, "%Y%m+"))) %>% 
+  filter(date >= first(portfolio_returns_tq_rebalanced_monthly_first_day$date)) %>% 
+  filter(date <= last(portfolio_returns_tq_rebalanced_monthly_first_day$date)) %>%
+  mutate_if(is.character,as.numeric)
+  
+})
+
+ff_portfolio_returns <- eventReactive(input$go, {
+
+  portfolio_returns_tq_rebalanced_monthly_first_day <-
+    portfolio_returns_tq_rebalanced_monthly_first_day()
+  
+  Global_3_Factors <- Global_3_Factors()
+  
+  ff_portfolio_returns <-
+  portfolio_returns_tq_rebalanced_monthly_first_day %>%
+  left_join(Global_3_Factors) %>% 
+  mutate(MKT = MKT/100,
+         SMB = SMB/100,
+         HML = HML/100,
+         RF = RF/100,
+         Returns_excess = returns - RF ) %>% 
+    na.omit()
+})
+
+ff_dplyr_byhand <- eventReactive(input$go, {
+  
+  ff_portfolio_returns <- ff_portfolio_returns()
+  
+  ff_dplyr_byhand <-
+  ff_portfolio_returns %>% 
+  do(model = lm(Returns_excess ~ MKT + SMB + HML, data = .)) %>% 
+  tidy(model)
+  
+})
+
+```
+
+Fama French
+=====================================
+
+### Model Results
+
+```{r}
+renderTable({
+  ff_dplyr_byhand()
+}, digits = 4)
+```
+  
+
+
+
+
+

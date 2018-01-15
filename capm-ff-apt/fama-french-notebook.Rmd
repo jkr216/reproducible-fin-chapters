@@ -5,10 +5,6 @@ output:
          latex_engine: xelatex
 ---
 
-FF or coming full circle! Why, because it's all about the data wrangling. Popping to our functions isn't that hard, as we'll see, once the data is lined up and in good shape.
- This one is going to get a little tricky - and that's why we're going to tackle it!
-
-
 ```{r setup, include = FALSE}
 
 library(tidyquant)
@@ -24,7 +20,29 @@ knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 load("~/reproducible-fin-chapters/returns/book-data.Rdata")
 ```
 
-We need to get the Fama French factors data. That's not readily available on yahoo! Luckily FF make their factor data readily available on their website. But they store them in zip files so we'll need to do a bit more than call `read_csv()`.  
+Let's extend that CAPM beta analysis by adding variables to the equation and explore the Fama French (FF) factor model of equity risk/return.  For more background, have a look at the orignial article published in *The Journal Financial Economics* titled "Common risk factors in the returns on stocks and bonds".  The model outlined by FF model is often called the 5-factor model, though we are going to look at only the first 3 factors: market returns (same as CAPM), firm size (small versus big) and book-to-market-equity.  The idea is to extend CAPM by explaining asset returns not just in terms of market returns, but in terms of the other two factors as well. From a general statistics point of view, we are extending last chapter's simple linear regression, where we had one independent varialbe, to a multiple linear regression, where we have several independent variable. 
+
+We have three overarching goals for this chapter: 
+
+First, we want to explore the surface of the FF model as it has become quite important to portfolio theory. 
+
+Second, we want see how our work translates from simple linear regression to multiple linear regression, since most of our work in practice will be of the multiple variety. 
+
+Third, and the most important and challenging part of this chapter, we want to see how to work with data that comes from a new source and thus needs to be wrangled for use with our core data objects. 
+
+We will see that wrangling the data is the easiest to understand - one does not need to know anything about portfolios, markets, finance, statistics etc. to see that the FF factor data is in a completely different structure from our portfolio returns data, and it's also the most time intensive. That combination of being easy to understand yet very time intensive can make data wrangling extremely maddening. Indeed, whenever I hear that quants or data scientists are challenged to write clever algorithms as part of their job interview, I nod my head, but think, they should also be challenged to wrangle some data. Can they do the easy but hard stuff that makes the train run on time? Because the most clever alogrithm in the world won't work unless the data is in the right shape for modeling.
+
+Furthermore, mashing together data from disparate sources is a necessary skill for anyone in industry that has data streams from different vendors and wants to get creative about how to use them. As we'll see, that task of making the data play nicely could be pushed onto someone else, but we better be aware of the decisions that someone else makes because it will affect our model and our results. 
+
+We are going to change gears a little here and focus just on the tidyverse for our task. Let's get to it!
+
+We need to get the Fama French factors data. That's not available on yahoo! Finance, but luckily FF make their factor data readily available on their website.  We are going to document each step for importing and cleaning this data, to an extent that might be overkill. It's frustrating for us now, but a time saver later when we need to update this model, and it's more than a time saver if someone else needs to update the model. If there's not a clear data provenance, it not be possible to reproduce this work. 
+
+Have a look at the FF website
+
+http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
+
+The data are packaged as zip files so we'll need to do a bit more than call `read_csv()`.  
 
 Let's use the `tempfile()` function from base R to create a variable called `temp`. This is where we will put the zipped file.
 
@@ -40,16 +58,17 @@ temp
 
 R has created a temporary file that will be cleaned up when we exit this session.
 
-Now we run `downloadfile()` and give it the URL address of the zip, which is "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_3_Factors_CSV.zip", and we tell the function to store that data in `temp`.
+Now we run `downloadfile()`,  pass it the URL address of the zip, which is "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_3_Factors_CSV.zip", and tell the function to store that data in `temp`.
 
 ```{r}
 download.file(
+  # location of file to be downloaded
   "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_3_Factors_CSV.zip",
+  # where we want R to store that file
   temp)
 ```
 
-We want to read the csv file using `read_csv()` but first we need to unzip that data with the `unz()` function. Give it a try with the code below:
-
+We want to read the csv file using `read_csv()` but first we need to unzip that data with the `unz()` function. Give it a try with the code below.
 
 ```{r}
 
@@ -57,9 +76,9 @@ Global_3_Factors <- read_csv(unz(temp, "Global_3_Factors.csv"))
 
 head(Global_3_Factors)  
 ```
-Totally out of whack! Evidently there is some metadata in that csv file that is making hard for the function to parse. 
+First off, it tells us this data was created using the Bloomberg database. So there is another source for this data. If you have access to Bloomberg, try to reproduce this script but pull directly from that endpoint. Also, more importantly, the data is totally out of whack. I don't see any factors, just a column with weird data formates. 
 
-When this occurs, it *usually* can be fixed by skipping a certain number of rows that sometimes contain helpful to humans but confusing to computers metadata. Have a look at what happens if we skip 6 rows. 
+When this occurs, it *usually* can be fixed by skipping a certain number of rows that contain helpful to humans but confusing to computers metadata. Have a look at what happens if we skip 6 rows. 
 
 ```{r}
 
@@ -68,7 +87,7 @@ Global_3_Factors <- read_csv(unz(temp, "Global_3_Factors.csv"),
 
 head(Global_3_Factors)
 ```
-Okay, this is what were were expecting. 5 columns:  one called `X1` that holds the weirdly Bloomberg formatted dates, then `Mkt-Rf` for the market returns, `SMB` for the small big factor, `HML` for the high minus low (or value premium) factor, and `RF` for the risk-free rate. 
+Okay, this is what were were expecting. 5 columns:  one called `X1` that holds the weirdly Bloomberg formatted dates, then `Mkt-Rf` for the market returns, `SMB` for the small big factor, `HML` for the high minus low (or book to market) factor, and `RF` for the risk-free rate. 
 
 Let's clean up the column names with `rename()`.
 
@@ -80,6 +99,10 @@ Global_3_Factors <-
 head(Global_3_Factors)
 ```
 
+The date column now has the right label, but still the wrong format. 
+
+We can use the `lubridate` package to parse that date number string into a nicer date format. `lubridate` is not technically part of the tidyverse immediate family, but it's a close cousin. We will use it's `parse_date_time()` function to parse those numbers, and call the `ymd()` function to make sure the end result is in a date format. Again, when working with data from a new source, the date and indeed any column can come in so many formats.
+
 ```{r}
 Global_3_Factors <- 
   read_csv(unz(temp, "Global_3_Factors.csv"), skip = 6) %>% 
@@ -89,12 +112,10 @@ Global_3_Factors <-
 head(Global_3_Factors)
 
 ```
-
-But we don't want the entire data set, just the part that matches our returns.
+The date format looks good, and we need that because, remember, we don't want the entire data set, just the part that matches the dates of our returns. Let's use
+`filter(date >= (first(portfolio_returns_tq_rebalanced_monthly$date) - months(1))) %>%       filter(date <= last(portfolio_returns_tq_rebalanced_monthly$date))` to get the dates that come closest to matching our returns dates. 
 
 ```{r}
-
-
 Global_3_Factors <- 
   read_csv(unz(temp, "Global_3_Factors.csv"), skip = 6) %>% 
   rename(date = X1, MKT = `Mkt-RF`) %>%
@@ -103,17 +124,20 @@ Global_3_Factors <-
   filter(date <= last(portfolio_returns_tq_rebalanced_monthly$date)) %>%
   mutate_if(is.character,as.numeric)
 
-# try to match by month
+head(Global_3_Factors)
+tail(Global_3_Factors)
 ```
 
+This data runs from "2013-02-01" to "2017-11-01" - evidently Fama-French use the first of the month for their monthly data. Does that match our returns data?
 
 ```{r}
 tail(Global_3_Factors)
 tail(portfolio_returns_tq_rebalanced_monthly)
 ```
 
+No, it doesn't. Our data runs through "2017-12-29". We have one more month of returns data.
 
-Can we merge these objects with a `left_join()`? 
+Can we merge these objects with a `left_join()`? The two objects have a common column called `date`. Let's see the result.
 
 ```{r}
 ff_portfolio_returns <- 
@@ -122,23 +146,41 @@ ff_portfolio_returns <-
 
 ff_portfolio_returns
 ```
-Have a look at the result: all of the Fama French factors have gone to NA. Why is that? Our date columns do not *exactly* match, and thus the FF columns get put to NA.
+Have a look at the result: all of the FF factors have gone to NA. Why is that? Our date columns do not *exactly* match, and thus the FF columns get put to NA.
 
-Instead, we need to add the FF data to our original `tibble` of monthly returns. Let's try that: 
+Indeed, we cannot perform a `join` here because the dates don't match up exactly. We need to add the FF data to our original `tibble` of monthly returns and make the decision to assign match on months, and ignore the first/last month discrepancy. 
+
+That's our decision, and we could make a different one. Consider the possibilities. We could go back and set our data to the first of the month. That wouldn't be too hard, but should we re-wrangle every time a new data source appears with descrepant dates? We could go to daily data, but there could be discrepancies there too. We could change the data column in our returns data to the first of the month. That wouldn't be too hard, but change our core data? 
+
+In the end, I am going to choose to consider the FF data as being representative of it's month, ignoring the first/last discrepancy. For example, the final observation for FF is dated "2017-01-11". I am going to consider that the November 2017 reading and match it up with the November 2017 returns observation, even though the days are different. Be aware that if you push data wrangling onto someone else, that someone will inevitably be making decisions that affect your model output. Make sure it's documented, explained, and reproducible!  
+
+Let's try to add the FF data to our returns data.
+
+We need to `filter()` our returns down to where the date is the same length as the FF data. We can do that with `filter(date <= Global_3_Factors$date + months(1))`. Why does that work? The FF data is set to the first of the month, our returns object `portfolio_returns_tq_rebalanced_monthly` is set to the last day of the month. I want to filter the `portfolio_returns_tq_rebalanced_monthly` by its dates that are less than or equal to the FF date, but I need to add one month to FF. 
+
+For example, the last date of FF is "2017-11-01", but I want to keep the returns date for "2017-11-30". Those are the November 2017 observations. The final `portfolio_returns_tq_rebalanced_monthly` date is in the same month but 29 days later. I can be sure to catch this by filter the portfolio returns to be less than the final FF date + 1 month. Here, that would mean keep all portfolio returns with a date less than "2017-12-01", or December 2017. I am sure to sweep up the November 30, 2017 observtaion. I realize that's convoluted, but this is data wrangling. I encourage all readers to come up with their own logic (and let me know!) if it works better.
+
+
 ```{r}
 ff_portfolio_returns <- 
   portfolio_returns_tq_rebalanced_monthly %>%
-  #slice(-59:-60) %>% 
+  filter(date <= Global_3_Factors$date + months(1)) %>% 
   mutate(MKT = Global_3_Factors$MKT/100,
          SMB = Global_3_Factors$SMB/100,
          HML = Global_3_Factors$HML/100,
-         RF = Global_3_Factors$RF,
+         RF = Global_3_Factors$RF/100,
          R_excess = returns - RF )
+
+tail(ff_portfolio_returns)
 ```
-An error! The data are not of the same length. We have 58 observations for the FF data and 59 for our monthly returns. Why? FF have data 
 
+Now we have one object with our portfolio retuns and FF factors. It took a lot of wrangling to get here and the dates were not very cooperative. We even had to make a decision about how to line up dates that don't line up, and there is always room to question that. 
 
-A now, the easiest part of our excercise, and the only part that end users will care about, the modeling. Why was it easy? We can copy/paste the flow from our CAPM work.
+And, now, the easiest part of our excercise, and the only part that end users will care about, the modeling. Why is it easy? We can copy/paste the flow from our CAPM work, now that we have the data in a nice format. To be upfront, I tortured everyone with that data wrangling to show that getting the data into the right format can be by far our most time consuming, and maddening, challenge. 
+
+The modeling is more straightforward since we use almost the same code as we used for CAPM. 
+
+`ff_portfolio_returns %>% do(model = lm(R_excess ~ MKT + SMB + HML, data = .)) %>%  tidy(model)`.
 
 ```{r}
 ff_dplyr_byhand <-
@@ -149,14 +191,45 @@ ff_dplyr_byhand <-
 ff_dplyr_byhand
 ```
 
+The results here aren't all that interesting because, as with CAPM, we are regressing a portfolio that contains the market on 3 factors, one of which is the market.  The takeaway here is not the substantive results. It's the code flow for how we got here. The modeling was straightforward, it was the wrangling that was hard. That's why we spent so much time on it.
 
-Take away: the intersesting part was the easiest. It was the wrangling that was hard. That's why we spent so much time on it.
+Our
 
-Market is not SPY. It's In October 2012, we revised the market return used to measure Rm-Rf in the US. It is now the value-weight return of all CRSP firms incorporated in the US and listed on the NYSE, AMEX, or NASDAQ that have (i) a CRSP share code of 10 or 11 at the beginning of month t, (ii) good shares and price data at the beginning of t, and (iii) good return data for t.
+```{r}
+ff_portfolio_returns %>% 
+  select(-returns, -RF) %>% 
+  gather(factor, data, -date, -R_excess)  %>% 
+  group_by(factor) %>% 
+  ggplot(aes(x = data, y = R_excess, color = factor, shape = factor)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + 
+  facet_wrap(~factor)
+```
+For the sake of completeness, let's look at how we could have changed our returns object `portfolio_returns_tq_rebalanced_monthly` to match the Fama French factors. We want to recast the `date` column to be tied to the first of the month. If it were an `xts` object, we could use 
+`to.monthly(indexAt = "firstof", OHLC = FALSE)`. So, let's convert it to `xts` with 
+`tk_xts(date_var = date)` from the `timetk` package.  
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+```{r}
+portfolio_returns_tq_rebalanced_monthly_first_day<- 
+  portfolio_returns_tq_rebalanced_monthly %>%
+  tk_xts(date_var = date) %>% 
+  to.monthly(indexAt = "firstof", OHLC = FALSE)
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+tail(portfolio_returns_tq_rebalanced_monthly_first_day)
+tail(Global_3_Factors)
+```
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+The dates are in the same format now. This makes our life a lot easier - but there was a cost. We changed our base data object. 
 
+We can perform a join to put these into one object now. But first we have to convert the ` portfolio_returns_tq_rebalanced_monthly_first_day` back to a tibble with `tk_tbl(preserve_index = TRUE, rename_index = "date")`
+
+```{r}
+ff_portfolio_returns_joined <-
+  portfolio_returns_tq_rebalanced_monthly_first_day %>% 
+  tk_tbl(preserve_index = TRUE, rename_index = "date")  %>% 
+  left_join(Global_3_Factors)
+
+ff_portfolio_returns_joined
+```
+
+That process seems slighly less painful than when we changed the date format of the FF factors. 

@@ -3,14 +3,7 @@ title: "Portfolio Theory in brief"
 output: html_notebook
 ---
 
-In this section we will devote three chapters to concepts from the realm of Modern Portfolio Theory (or MPT). 
+In this section we will devote three chapters to the relationship between risk and return, or what I think of as a simplified introduction to Modern Portfolio Theory.  As with volatility/risk, we will not delve deep into the theory of these concepts but instead will focus on readable, reproducible workflows using different R objects and packages.  If you wish to delve further into these topics, have a look at BKM and Zivot's new book. Or, go back to the source and fire up Harry Markowitz's 1959 monograph, William Sharpe's   , Sortino's and William Sharpe's
 
-Modern Portfolio by way of very brief background, is the idea that "an asset's risk and return should not be assessed by itself, but by how it contributes to a portfolio's overall risk and return." MPT is sometimes called mean-variance optimization because the goal is to optimize the ratio of returns to risk (where variance or standard deviation is the riskiness).  Up until now, we have been looking at returns in isolation and risk in isolation, without regard to how the two are related. 
-
-First, we will touch on the Capital Asset Pricing Model and specifically how to calculate the market beta for our portfolio.
-
-Next we will discuss the Sharpe Ratio and the Sortion Ratio, two measures of the return/risk ratio of a portfolio.  
-
-As with volatility/risk, we will not delve deep into the theory or mathematics of MPT or these concepts but instead will focus on readable, reproducible workflows using different R objects and packages.  If you wish to delve further into these topics, have a look at BKM and Zivot's new book. 
-
-The aim is to give a workflow that is reproducible and reusable for more complex work on these concepts.
+Up until now, we have been looking at returns in isolation and risk in isolation, without regard to how the two are related. This section will focus on their relationship, how to measure it, how to think about, how to visualize it. 
+First, we will touch on the Capital Asset Pricing Model and specifically how to calculate the market beta for our portfolio. Next we will discuss the Sharpe Ratio and the Sortion Ratio, two measures of the return/risk ratio of a portfolio.  

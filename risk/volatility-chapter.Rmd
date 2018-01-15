@@ -349,30 +349,52 @@ head(port_rolling_sd_xts)
 
 ### Rolling Volatility in tidyverse
 
-In the tidyverse, we start with the `portfolio_returns_dplyr_byhand` and calculte rolling standard deviation with `mutate(rolling_sd = rollapply(returns, FUN = sd, width = window, fill = NA))`. It's very similar to how we did with `xts` except in a piped dplyr flow.
+In the tidyverse, rolling calculations aren't as simple. Try the code chunk below.
 
 ```{r}
-port_rolling_sd_tidy <- 
+port_rolling_sd_tidy_does_not_work <- 
   portfolio_returns_dplyr_byhand %>% 
-  mutate(rolling_sd = rollapply(returns, FUN = sd, width = window, fill = NA)) %>%
-  select(date, rolling_sd) %>% 
-  na.omit()
+  mutate(rolling_sd = rollapply(returns, FUN = sd, width = 6, fill = NA)) %>%
+  select(date, rolling_sd) 
 
-head(port_rolling_sd_tidy)
+head(port_rolling_sd_tidy_does_not_work)
 ```
 
-ALT METHOD IF WANTED
+The `width` argument isn't being picked up correctly.
+
+There is an alternative method we can use in the `RccpRoll` package, which has a built-in rolling standard deviation function `roll_sd()`.
+
 ```{r}
 library(RcppRoll)
-port_rolling_sd_tidy_alt <- 
+port_rolling_sd_tidy_rccproll <- 
   portfolio_returns_tq_rebalanced_monthly %>% 
   mutate(rolling_sd = roll_sd(returns, window, fill = NA, align = "right")) %>%
   select(date, rolling_sd) %>% 
   na.omit()
 
-port_rolling_sd_tidy_alt
+head(port_rolling_sd_tidy_rccproll)
+```
+We can also combine the tidyverse with a piece of the tidyquant family and use the `tibbletime` package. 
+
+```{r}
+library(tibbletime)
+
+sd_roll_6 <- rollify(sd, window = window)
+  
+rolling_sd_tidy_tibbletime <- 
+  portfolio_returns_tq_rebalanced_monthly %>%
+  as_tbl_time(index = date) %>% 
+  mutate(sd = sd_roll_6(returns)) %>% 
+  na.omit() %>%
+  mutate(sd_rccp_roll = port_rolling_sd_tidy_rccproll$rolling_sd) %>% 
+  select(-returns)
+
+head(rolling_sd_tidy_tibbletime)
 ```
 
+That works fine, but it's not generalizable since the `RccpRoll` package does not have built-in functions for most statistics we might want to calculate (as we'll see with Kurtosis and Skewness).  
+
+For this reason, `xts` or `tidyquant` is where I generally turn for rolling calculations.
 
 ### Rolling Volatility with tidyquant
 
@@ -389,11 +411,11 @@ port_rolling_sd_tq <-
   na.omit()
 ```
 
-Take a quick peak to confirm consistent results. 
+Take a quick peek to confirm consistent results. 
 
 ```{r}
 head(port_rolling_sd_xts)
-head(port_rolling_sd_tidy)
+head(port_rolling_sd_tidy_rccproll)
 head(port_rolling_sd_tq)
 ```
 

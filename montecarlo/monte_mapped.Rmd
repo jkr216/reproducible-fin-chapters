@@ -14,7 +14,7 @@ knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 load("~/reproducible-fin-chapters/returns/book-data.Rdata")
 ```
 
-On to simulating the growth of a dollar in our portfolio.
+Let's wrap things up by having some fun, which means simulating returns out into the future.  
 
 We will revisit these steps in more detail below but briefly we will: 
 
@@ -48,7 +48,7 @@ head(simulated_monthly_returns)
 tail(simulated_monthly_returns)
 ```
 
-Hard to get an intution about whether these results make sense. Let's calculate the growth of a dollar using that `simulated_monthly_returns` object.  This is very similar to how we calculated the growth of a dollar in our actual portfolio in Chapter 1 Section 4. We add a 1 to each of our monthly returns and then run cumulative functions.
+Hard to get an intution about whether these results make sense. Let's calculate the growth of a dollar using that `simulated_monthly_returns` object.  This is very similar to how we calculated the growth of a dollar in our actual portfolio in Section 1. We add a 1 to each of our monthly returns and then run cumulative functions.
 
 ```{r}
 simulated_returns_add_1 <- 
@@ -82,7 +82,7 @@ cagr
 ```
 
 
-This simulation indicates our portfolio grew in size to `r simulated_growth$growth1[nrow(simulated_growth)]` over the simulated future 10 years, implying an annual compounded growth of `r cagr`%. That seems reasonable given our actual returns have all been taken from a raging bull market.
+This simulation indicates our portfolio grew in size to `r simulated_growth$growth1[nrow(simulated_growth)]` over the simulated future 10 years, implying an annual compounded growth of `r cagr`%. That seems reasonable given our actual returns have all been taken from a raging bull market. Remember, it's a simulation. If you re run this code on your own, you will get a different result each time.
 
 If we feel good about this first simulation, we now want to run a lot more of them to get a sense for how they are distributed.
 

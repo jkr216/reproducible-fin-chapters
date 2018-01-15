@@ -21,7 +21,7 @@ knitr::opts_chunk$set(message=FALSE, warning=FALSE)
 load("~/reproducible-fin-chapters/returns/book-data.Rdata")
 ```
 
-Let's take a brief look at the Capital Asset Pricing Model, or CAPM.  
+We start our journey into portfolio theory with a l the Capital Asset Pricing Model, or CAPM.  
 
 By way of extraordinarily brief background, CAPM is a model, created by William Sharpe, that estimates the return of an asset based on the return of the market and the asset's linear relationship to the return of the market. That linear relationship is the stock's beta coefficient, or just good'ol beta. 
 
@@ -43,8 +43,12 @@ Let's calculate our market return for SPY and save it as `market_return_xts`.
 ```{r}
 
 market_returns_xts <- 
-    getSymbols("SPY", src = 'yahoo', from = "2013-01-01", 
-             auto.assign = TRUE, warnings = FALSE) %>% 
+    getSymbols("SPY", 
+               src = 'yahoo', 
+               from = "2013-01-01", 
+               to = "2017-12-31",
+             auto.assign = TRUE, 
+             warnings = FALSE) %>% 
     map(~Ad(get(.))) %>% 
     reduce(merge) %>%
     `colnames<-`("SPY") %>% 
@@ -68,7 +72,9 @@ head(market_returns_tidy)
 We have a `market_return` object. Let's make sure it's periodicity aligns perfectly with our portfolio returns periodicity
 
 ```{r}
-portfolio_returns_tq_rebalanced_monthly %>% mutate(market_returns = market_returns_tidy$returns) %>% head()
+portfolio_returns_tq_rebalanced_monthly %>% 
+  mutate(market_returns = market_returns_tidy$returns) %>%
+  head()
 ```
 
 Note that if the periodicities did not align, `mutate()` would have thrown an error in the code chunk above.
@@ -122,13 +128,7 @@ beta_assets <-
 beta_assets
 ```
 
-We now have 3 columns: `asset` which we had before, `data` which we had before, and `model` which we just added. The `model` column holds the results of the regression `lm(returns ~ market_returns_tidy$returns, data = .)` that we ran for each of our assets. Those results are a beta and an intercept for each of our assets. 
-
-```{r}
-beta_assets$model
-```
-
-We have our beta for each asset but not in a great format for presenation to others or even readability by ourselves. 
+We now have 3 columns: `asset` which we had before, `data` which we had before, and `model` which we just added. The `model` column holds the results of the regression `lm(returns ~ market_returns_tidy$returns, data = .)` that we ran for each of our assets. Those results are a beta and an intercept for each of our assets  but not in a great format for presenation to others or even readability by ourselves. 
 
 Let's tidy up our results with the `tidy()` function from the `broom` package. We want to apply that function to our model column and will use the `mutate()` and `map()` combination again. The complete call is to
 `mutate(model = map(model, tidy))`.
@@ -251,8 +251,6 @@ beta_builtin_tq$beta_tq
 
 Consistent results and a beta near 1 as we were expecting, since our portfolio has a 25% allocation to the S&P500.  We're less concernced with number and more so with the various code flows used to get here. 
 
-[A WORD ON THOSE FLOWS]
-
 Now on to visualization. Since we have introduced a bit of linear modeling, let's return to that `dplyr` by-hand method and visualize the relationshiop between our portfolio and the market returns.  
 
 A good way to start is a scatterplot with market returns on the x-axis and portfolio returns on the y-axis. 
@@ -360,11 +358,19 @@ Our fitted growth looks pretty good, which again is unsurprising since we regres
 
 ### On to Shiny
 
-1) scatter with line 
-2) model returns
-3) input slightly different? Or force it to the S&P? 
 
-Get the market return. 
+
+Have a look at the final app because the visualizations are different than what we have built 
+
+www.reproduciblefinance.com/shiny/capm-beta/
+
+![capm shiny app](snapshot-capm-app.png)
+
+We are showing the portfolio returns scattered against the market, and with the regression line drawn. We also display the estimates of the alpha and beta terms, along with the p-value.
+
+Our input sidebar is the usual inputs for assets, weights and start date. 
+
+Then we calculate the market return. 
 
 ```{r, eval = FALSE}
 market_return <- eventReactive(input$go, {
@@ -383,7 +389,7 @@ market_return <- eventReactive(input$go, {
 })
 ```
 
-Get portfolio returns. 
+Next we calculate portfolio returns. 
 
 ```{r, eval = FALSE}
 portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
@@ -408,7 +414,7 @@ portfolio_returns_tq_rebalanced_monthly <- eventReactive(input$go, {
 ```
 
 
-Calculate beta and tidy the results. 
+We use those two reactives, `portfolio_returns_tq_rebalanced_monthly` and `market_return` to run our regression and calculate beta.
 
 ```{r, eval = FALSE}
 beta_dplyr_byhand <- eventReactive(input$go, {
@@ -426,7 +432,7 @@ beta_dplyr_byhand <- eventReactive(input$go, {
 })
 ```
 
-Now call to `ggplot()` just as we did in our original calculation. 
+Now we call to `ggplot()` just as we did in our original calculation. 
 
 ```{r, eval = FALSE}
 renderPlot({
@@ -443,10 +449,18 @@ renderPlot({
 })
 ```
 
-We will add one new aesthetic by calling `renderTable()` so we can display the results of our model.
- 
+We will add one new feature by calling `renderTable()` so we can display the results of our model.
+This is not really a data visualization since we are displaying model results but the aesthetics still matter. 
+
 ```{r, eval = FALSE}
 renderTable({
   beta_dplyr_byhand()
 }, digits = 4)
 ```
+
+
+
+
+### Conclusion
+
+That wraps up our section on portfolio theory, which we drastically reduced down to the Sharpe Ratio, Sortino Rato and CAPM beta. 
